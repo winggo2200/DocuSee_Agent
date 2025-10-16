@@ -1,0 +1,13 @@
+package com.docuseeagent;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class DocuSeeAgentApplicationTests {
+
+    @Test
+    void contextLoads() {
+    }
+
+}
