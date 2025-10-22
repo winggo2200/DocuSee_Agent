@@ -1,6 +1,8 @@
 package com.docuseeagent.docusee;
 
 import com.docuseeagent.config.Constants;
+import com.docuseeagent.model.redis.RedisDataInfo;
+import com.docuseeagent.service.RedisService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.handler.ssl.SslContext;
@@ -9,7 +11,9 @@ import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.BodyInserters;
@@ -19,12 +23,17 @@ import reactor.netty.http.client.HttpClient;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
 public class DocuSee {
-    public static String Parse(String _strUuid) {
+    public static String Parse(String _strUuid, RedisService _redisService) {
         String strFilePath = new File(Constants.PATH_DOC).getAbsolutePath() + "/" + _strUuid + "/GPU";
         File[] fileList = new File(strFilePath).listFiles(File::isFile);
 
@@ -58,9 +67,27 @@ public class DocuSee {
                         dictFileTaskId.put(strTaskId, file.getName());
                     }
 
-                    for (String strKey : dictFileTaskId.keySet()) {
+
+
+                    String strData = _redisService.GetValue(_strUuid);
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    try {
+                        RedisDataInfo redisData = objectMapper.readValue(strData, RedisDataInfo.class);
+
+                        redisData.docuseeTaskIds = List.copyOf(dictFileTaskId.keySet());
+
+                        _redisService.SetValue(_strUuid, redisData);
+                    } catch (Exception e) {
+                        _redisService.RemoveListValue(Constants.REDIS_KEY_PROC, _strUuid);
+                        _redisService.DeleteValue(_strUuid);
+                        return null;
+                    }
+
+
+
+                    for (String strTask : dictFileTaskId.keySet()) {
                         try {
-                            String strUrl = Constants.SERVER_ADDR_GPU + "/api/v1/images/get_task_results/" + strKey;
+                            String strUrl = Constants.SERVER_ADDR_GPU + "/api/v1/images/get_task_results/" + strTask;
 
                             long startTime = System.currentTimeMillis();
 
@@ -70,9 +97,7 @@ public class DocuSee {
                                 JsonNode nodeParseResult = objMapper.readTree(strRes);
 
                                 if (nodeParseResult.get("status").asText().equals("SUCCESS")) {
-                                    //String[] astrFileName = dictFileTaskId.get(strKey).split("\\.");
-
-                                    String strFileName = dictFileTaskId.get(strKey);
+                                    String strFileName = dictFileTaskId.get(strTask);
                                     String strFileFirst = strFileName.substring(0, strFileName.lastIndexOf("."));
                                     String strFileLast = strFileName.substring(strFileName.lastIndexOf(".") + 1);
 
@@ -144,7 +169,9 @@ public class DocuSee {
 
                                         lstResults.add(dictDocData);
 
-                                        String strImgAddr = Constants.SERVER_MAIN_HOST + "/api/v1/agent-docusee/img/get-doc?uuid=" + _strUuid + "&file=" + dictFileTaskId.get(strKey) + "&page=" + strPageNum;
+                                        String strDocFileName = URLEncoder.encode(dictFileTaskId.get(strTask), StandardCharsets.UTF_8);
+
+                                        String strImgAddr = Constants.SERVER_MAIN_HOST + "/api/v2/agent/img/get/doc?uuid=" + _strUuid + "&file=" + strDocFileName + "&page=" + strPageNum;
 
                                         HashMap<String, String> dictDocImg = new HashMap<>();
                                         dictDocImg.put("src", strImgAddr);
@@ -152,14 +179,11 @@ public class DocuSee {
 
                                         lstDocImg.add(dictDocImg);
 
-//                                        String strPageImgUrl = nodePage.get("image_url").asText();
                                         String strPageImgUrl = nodePage.get("image_data").asText();
-
-                                        strPageImgUrl = strPageImgUrl.substring(0, strPageImgUrl.indexOf("?"));
 
                                         String strPageImgName = strPageImgUrl.substring(strPageImgUrl.lastIndexOf("/") + 1);
 
-                                        strPageImgUrl = Constants.SERVER_ADDR_IMG + "/genapp/" + strPageImgName;
+                                        strPageImgUrl = Constants.SERVER_ADDR_IMG + "/dummy-user/" + strPageImgName;
 
                                         byte[] byPageImg;
                                         byPageImg = webclientForImg.get().uri(strPageImgUrl).accept(MediaType.MULTIPART_FORM_DATA).retrieve().bodyToMono(byte[].class).block();
@@ -171,7 +195,7 @@ public class DocuSee {
 
                                     HashMap<String, Object> dictResultDoc = new HashMap<>();
 
-                                    dictResultDoc.put("filename", dictFileTaskId.get(strKey));
+                                    dictResultDoc.put("filename", dictFileTaskId.get(strTask));
                                     dictResultDoc.put("pages", lstResults);
                                     dictResultDoc.put("page_image_urls", lstDocImg);
 

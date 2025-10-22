@@ -2,10 +2,18 @@ package com.docuseeagent.controller;
 
 import com.docuseeagent.config.Constants;
 import com.docuseeagent.docusee.DParser;
-import com.docuseeagent.dparser.structure.StructDparserRes;
+import com.docuseeagent.docusee.DocuSee;
+import com.docuseeagent.jobtask.TaskCtrl;
+import com.docuseeagent.model.dparser.DparserRes;
+import com.docuseeagent.model.redis.RedisDataInfo;
+import com.docuseeagent.service.RedisService;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -18,15 +26,35 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
 @RestController
+@RequiredArgsConstructor
 public class RestApiCtrl {
-    // 현재 처리중인 uuid 목록 (CPU, GPU)
-    public static List<String> lstUuidProc = new ArrayList<>();
+    private final RedisService m_redisService;
+    private final ObjectMapper objectMapper;
+
+    private TaskCtrl m_taskCtrl = null;
+
+    // init after application is ready
+    @EventListener(ApplicationReadyEvent.class)
+    public void init() {
+        m_redisService.DeleteList(Constants.REDIS_KEY_UPLOAD);
+        m_redisService.DeleteList(Constants.REDIS_KEY_WAIT);
+        m_redisService.DeleteList(Constants.REDIS_KEY_PROC);
+        m_redisService.DeleteList(Constants.REDIS_KEY_COMPLETED);
+
+        // Task(Thread) Controller 초기화
+        if (m_taskCtrl == null) {
+            m_taskCtrl = new TaskCtrl(m_redisService);
+        }
+    }
 
     @CrossOrigin(origins = "*")
     @PostMapping("/upload")
@@ -45,10 +73,10 @@ public class RestApiCtrl {
         String strFilePath = new File(Constants.PATH_DOC).getAbsolutePath() + "/" + strUuid + "/";
 
         if (_strUuid != null) {
-            if (lstUuidProc.contains(_strUuid)) {
-                String strRes = "The document is being processed.";
-                return new ResponseEntity(strRes, HttpStatus.BAD_REQUEST);
-            }
+            if (m_redisService.HasValue(Constants.REDIS_KEY_PROC, _strUuid))
+                return new ResponseEntity("The document is being processed.", HttpStatus.BAD_REQUEST);
+            else if (m_redisService.HasValue(Constants.REDIS_KEY_COMPLETED, _strUuid))
+                return new ResponseEntity("The document has been processed.", HttpStatus.BAD_REQUEST);
 
             File fileDocDir = new File(strFilePath);
             try {
@@ -92,8 +120,24 @@ public class RestApiCtrl {
                 }
             }
 
+            RedisDataInfo redisDataInfo = new RedisDataInfo();
+
+            redisDataInfo.status = Constants.REDIS_STATUS_UPLOAD;
+            redisDataInfo.dparserId = strUuid;
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+            redisDataInfo.date = LocalDateTime.now().format(formatter);
+
+            ObjectMapper mapper = new ObjectMapper();
+
+            m_redisService.SetValue(strUuid, mapper.writeValueAsString(redisDataInfo));
+
+            if (m_redisService.HasValue(Constants.REDIS_KEY_UPLOAD, strUuid) != null)
+                m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
+
             return new ResponseEntity(strUuid, HttpStatus.OK);
         } catch (IOException e) {
+            m_redisService.RemoveListValue(Constants.REDIS_KEY_UPLOAD, strUuid);
             throw new RuntimeException(e);
         }
     }
@@ -102,46 +146,97 @@ public class RestApiCtrl {
     @PostMapping("/parse")
     private ResponseEntity ParseDocFiles(@RequestHeader HttpHeaders _header,
                                          @RequestParam("uuid") String _strUuid) {
-        if (lstUuidProc.contains(_strUuid)) {
-            String strRes = "The document is being processed.";
-            return new ResponseEntity(strRes, HttpStatus.BAD_REQUEST);
+        String strData = m_redisService.GetValue(_strUuid);
+        if (strData != null) {
+            if (!strData.isEmpty()) {
+                try {
+
+                    ObjectMapper mapper = new ObjectMapper();
+                    RedisDataInfo dataInfo = null;
+
+                    dataInfo = mapper.readValue(strData, RedisDataInfo.class);
+
+                    String strStatus = dataInfo.status;
+
+                    if (strStatus.equals(Constants.REDIS_STATUS_UPLOAD)) { // upload 상태
+                        m_redisService.RemoveListValue(Constants.REDIS_KEY_UPLOAD, _strUuid);
+
+                        RedisDataInfo redisDataInfo = new RedisDataInfo();
+
+                        redisDataInfo.status = Constants.REDIS_STATUS_WAIT;
+                        m_redisService.SetValue(_strUuid, mapper.writeValueAsString(dataInfo));
+
+                        // waiting queue 등록
+                        Long lCnt = m_redisService.RightPushValue(Constants.REDIS_KEY_WAIT, _strUuid);
+                        if (lCnt <= 0) { // waiting queue 등록 실패
+                            dataInfo.status = Constants.REDIS_STATUS_UPLOAD;
+                            m_redisService.SetValue(_strUuid, mapper.writeValueAsString(dataInfo));
+
+                            return new ResponseEntity("Fail to add waiting queue", HttpStatus.OK);
+                        }
+                    } else { // upload 이외의 상태
+                        return new ResponseEntity(strStatus, HttpStatus.OK);
+                    }
+                } catch (Exception e) {
+                    return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
+                }
+            }
+
+            return new ResponseEntity(_strUuid, HttpStatus.OK);
         }
 
-        lstUuidProc.add(_strUuid);
+        return new ResponseEntity("No uploaded data found.", HttpStatus.BAD_REQUEST);
 
-        // file upload
-        StructDparserRes structDparserRes = DParser.Upload(_strUuid);
-
-        if (!structDparserRes.result.equals("success")) {
-            lstUuidProc.remove(_strUuid);
-            return new ResponseEntity(structDparserRes.message, HttpStatus.BAD_REQUEST);
-        }
-
-        structDparserRes = DParser.Parse(_strUuid);
-
-        if (structDparserRes.result.equals("success")) {
-            return new ResponseEntity(structDparserRes.message, HttpStatus.OK);
-        } else {
-            lstUuidProc.remove(_strUuid);
-            return new ResponseEntity(structDparserRes.message, HttpStatus.BAD_REQUEST);
-        }
     }
 
-
     @CrossOrigin(origins = "*")
-    @PostMapping("/getdata")
-    public ResponseEntity GetDocData(@RequestParam("uuid") String _strUuid) {
-        ObjectMapper objMapper = new ObjectMapper();
+    @PostMapping("/parsing-sync")
+    public ResponseEntity ParsingSync(@RequestParam("uuid") String _strUuid) {
+        // parse using cpu
+        String strFilePath = new File(Constants.PATH_DOC).getAbsolutePath() + "/" + _strUuid + "/CPU";
+        File[] fileList = new File(strFilePath).listFiles(File::isFile);
+
+        if (fileList != null) {
+            if (fileList.length > 0) {
+                DparserRes structDparserRes = DParser.Upload(_strUuid);
+
+                if (!structDparserRes.result.equals("success")) {
+                    return new ResponseEntity(structDparserRes.message, HttpStatus.BAD_REQUEST);
+                }
+
+                structDparserRes = DParser.Parse(_strUuid);
+
+                if (!structDparserRes.result.equals("success")) {
+                    return new ResponseEntity(structDparserRes.message, HttpStatus.BAD_REQUEST);
+                }
+            }
+        }
+
+        // parse using gpu
+        strFilePath = new File(Constants.PATH_DOC).getAbsolutePath() + "/" + _strUuid + "/GPU";
+        fileList = new File(strFilePath).listFiles(File::isFile);
+
+        if (fileList != null) {
+            if (fileList.length > 0) {
+                String strRes = DocuSee.Parse(_strUuid, m_redisService);
+
+                if (strRes == null) {
+                    return new ResponseEntity("Parsing(GPU) Error.\n", HttpStatus.BAD_REQUEST);
+                }
+            }
+        }
 
         File fileDir = new File(new File(Constants.PATH_RESULT).getAbsolutePath() + "/" + _strUuid + "/");
 
         // 이전에 획득한 적이 있는 경우 기존에 파일이 있는지 확인하여 처리
-        if (!lstUuidProc.contains(_strUuid)) {
-            File[] fileDirs = fileDir.listFiles(File::isDirectory);
 
-            List<Object> lstDocDatas = new ArrayList<>();
+        File[] fileDirs = fileDir.listFiles(File::isDirectory);
 
-            try {
+        try {
+            ObjectMapper objMapper = new ObjectMapper();
+
+            if (fileDirs.length > 0) {
+                List<Object> lstDocDatas = new ArrayList<>();
                 for (File file : fileDirs) {
                     File fileJson = new File(file.getAbsolutePath() + "/DATA/result.json");
 
@@ -158,20 +253,87 @@ public class RestApiCtrl {
                 String strRes = objMapper.writeValueAsString(dictResult);
 
                 return new ResponseEntity(strRes, HttpStatus.OK);
-            } catch (Exception e) {
-                return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
+            } else {
+                return new ResponseEntity("No processed data found.", HttpStatus.BAD_REQUEST);
             }
-        }
-
-        StructDparserRes structDparserRes = DParser.GetData(_strUuid);
-
-        if (structDparserRes.result.equals("success")) {
-            lstUuidProc.remove(_strUuid);
-            return new ResponseEntity(structDparserRes.message, HttpStatus.OK);
-        } else {
-            return new ResponseEntity(structDparserRes.message, HttpStatus.BAD_REQUEST);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
+
+
+
+    @CrossOrigin(origins = "*")
+    @PostMapping("/getdata")
+    public ResponseEntity GetDocData(@RequestParam("uuid") String _strUuid) {
+        String strData = m_redisService.GetValue(_strUuid);
+
+        if(strData != null ) {
+            if (!strData.isEmpty()) {
+                try {
+                    ObjectMapper objMapper = new ObjectMapper();
+
+                    RedisDataInfo info = objMapper.readValue(strData, RedisDataInfo.class);
+
+                    switch (info.status) {
+                        case Constants.REDIS_STATUS_UPLOAD -> {
+                            return new ResponseEntity("Upload state", HttpStatus.BAD_REQUEST);
+                        }
+                        case Constants.REDIS_STATUS_WAIT -> {
+                            return new ResponseEntity("Waiting state", HttpStatus.BAD_REQUEST);
+                        }
+                        case Constants.REDIS_STATUS_PROC -> {
+                            return new ResponseEntity("Processing state", HttpStatus.BAD_REQUEST);
+                        }
+                        case Constants.REDIS_STATUS_COMPLETED -> {
+                            File fileDir = new File(new File(Constants.PATH_RESULT).getAbsolutePath() + "/" + _strUuid + "/");
+
+                            // 이전에 획득한 적이 있는 경우 기존에 파일이 있는지 확인하여 처리
+
+                            File[] fileDirs = fileDir.listFiles(File::isDirectory);
+
+                            if (fileDirs.length > 0) {
+                                List<Object> lstDocDatas = new ArrayList<>();
+                                for (File file : fileDirs) {
+                                    File fileJson = new File(file.getAbsolutePath() + "/DATA/result.json");
+
+                                    if (fileJson.exists()) {
+                                        JsonNode nodeFileData = objMapper.readTree(Files.readString(Paths.get(fileJson.getAbsolutePath())));
+                                        lstDocDatas.add(nodeFileData);
+                                    }
+                                }
+
+                                HashMap<String, Object> dictResult = new HashMap<>();
+                                dictResult.put("uuid", _strUuid);
+                                dictResult.put("docs", lstDocDatas);
+
+                                String strRes = objMapper.writeValueAsString(dictResult);
+
+                                return new ResponseEntity(strRes, HttpStatus.OK);
+                            } else {
+                                return new ResponseEntity("No processed data found.", HttpStatus.BAD_REQUEST);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
+                }
+
+            }
+
+        }
+        return new ResponseEntity("No processed data found.", HttpStatus.BAD_REQUEST);
+
+//        DparserRes structDparserRes = DParser.GetData(_strUuid);
+//
+//        if (structDparserRes.result.equals("success")) {
+//            //lstUuidProc.remove(_strUuid);
+//            return new ResponseEntity(structDparserRes.message, HttpStatus.OK);
+//        } else {
+//            return new ResponseEntity(structDparserRes.message, HttpStatus.BAD_REQUEST);
+//        }
+    }
+
 
     @CrossOrigin(origins = "*")
     @GetMapping("/img/get/resource")

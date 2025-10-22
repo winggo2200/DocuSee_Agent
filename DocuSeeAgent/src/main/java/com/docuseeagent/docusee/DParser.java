@@ -1,7 +1,7 @@
 package com.docuseeagent.docusee;
 
 import com.docuseeagent.config.Constants;
-import com.docuseeagent.dparser.structure.StructDparserRes;
+import com.docuseeagent.model.dparser.DparserRes;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
@@ -26,7 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 
 public class DParser {
-    public static StructDparserRes Upload(String _strUuid) {
+    public static DparserRes Upload(String _strUuid) {
         String strFilePath = new File(Constants.PATH_DOC).getAbsolutePath() + "/" + _strUuid + "/CPU";
 
         File[] fileList = new File(strFilePath).listFiles(File::isFile);
@@ -37,7 +37,7 @@ public class DParser {
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(-1))
                 .build()).build();
 
-        StructDparserRes structDparserResResult = new StructDparserRes();
+        DparserRes structDparserResResult = new DparserRes();
 
         structDparserResResult.id = _strUuid;
 
@@ -54,11 +54,11 @@ public class DParser {
 
                     String strResult = webClient.post().uri(strDparserAddr).body(BodyInserters.fromMultipartData(builder.build())).retrieve().bodyToMono(String.class).block();
 
-                    StructDparserRes structDparserRes;
+                    DparserRes structDparserRes;
 
                     ObjectMapper objMapper = new ObjectMapper();
                     try {
-                        structDparserRes = objMapper.readValue(strResult, StructDparserRes.class);
+                        structDparserRes = objMapper.readValue(strResult, DparserRes.class);
                     } catch (Exception e) {
                         structDparserResResult.result = "failure";
 
@@ -85,7 +85,7 @@ public class DParser {
 
     }
 
-    public static StructDparserRes Parse(String _strUuid) {
+    public static DparserRes Parse(String _strUuid) {
         String strDparserAddr = Constants.SERVER_ADDR_CPU + "/parse";
 
         WebClient webClient = WebClient.builder().exchangeStrategies(ExchangeStrategies.builder()
@@ -97,13 +97,13 @@ public class DParser {
 
         String strResult = webClient.post().uri(strDparserAddr).body(BodyInserters.fromFormData(mapBody)).retrieve().bodyToMono(String.class).block();
 
-        StructDparserRes structDparserResResult = new StructDparserRes();
+        DparserRes structDparserResResult = new DparserRes();
 
 
         ObjectMapper objMapper = new ObjectMapper();
-        StructDparserRes structDparserRes;
+        DparserRes structDparserRes;
         try {
-            structDparserRes = objMapper.readValue(strResult, StructDparserRes.class);
+            structDparserRes = objMapper.readValue(strResult, DparserRes.class);
         } catch (Exception e) {
             structDparserResResult.id = _strUuid;
             structDparserResResult.result = "failure";
@@ -115,7 +115,7 @@ public class DParser {
         return structDparserRes;
     }
 
-    public static StructDparserRes GetData(String _strUuid) {
+    public static DparserRes GetData(String _strUuid) {
         ObjectMapper objMapper = new ObjectMapper();
 
         File fileDir = new File(new File(Constants.PATH_RESULT).getAbsolutePath() + "/" + _strUuid + "/");
@@ -139,7 +139,7 @@ public class DParser {
         ).block();
 
         try {
-            StructDparserRes structDparserRes = objMapper.readValue(strResult, StructDparserRes.class);
+            DparserRes structDparserRes = objMapper.readValue(strResult, DparserRes.class);
 
             if (structDparserRes.result.equals("success")) {
                 try {
@@ -334,7 +334,7 @@ public class DParser {
                     dictResult.put("uuid", _strUuid);
                     dictResult.put("docs", lstDocDatas);
 
-                    StructDparserRes structDparserResResult = new StructDparserRes();
+                    DparserRes structDparserResResult = new DparserRes();
                     structDparserResResult.result = "success";
                     structDparserResResult.id = _strUuid;
                     structDparserResResult.message = objMapper.writeValueAsString(dictResult);
@@ -348,7 +348,7 @@ public class DParser {
                     return structDparserResResult;
 
                 } catch (Exception e) {
-                    StructDparserRes structDparserResResult = new StructDparserRes();
+                    DparserRes structDparserResResult = new DparserRes();
                     structDparserResResult.result = "failure";
                     structDparserResResult.id = _strUuid;
                     structDparserResResult.message = e.getMessage();
@@ -359,7 +359,7 @@ public class DParser {
                 return structDparserRes;
             }
         } catch (Exception e) {
-            StructDparserRes structDparserResResult = new StructDparserRes();
+            DparserRes structDparserResResult = new DparserRes();
             structDparserResResult.result = "failure";
             structDparserResResult.id = _strUuid;
             structDparserResResult.message = e.getMessage();
