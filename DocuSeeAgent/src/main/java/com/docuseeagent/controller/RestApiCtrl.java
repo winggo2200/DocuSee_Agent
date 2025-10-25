@@ -4,7 +4,7 @@ import com.docuseeagent.config.Constants;
 import com.docuseeagent.dparser.DParser;
 import com.docuseeagent.docusee.DocuSee;
 import com.docuseeagent.jobtask.TaskCtrl;
-import com.docuseeagent.model.dparser.DparserRes;
+import com.docuseeagent.model.parser.ParserRes;
 import com.docuseeagent.model.redis.RedisDataInfo;
 import com.docuseeagent.service.RedisService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -250,7 +250,15 @@ public class RestApiCtrl {
                 File fileDoc = new File(fileGPU.getAbsolutePath() + "/" + _file.getOriginalFilename());
                 _file.transferTo(fileDoc);
 
-                DocuSee.Parse(strUuid, null);
+                ParserRes structDocuseeRes = DocuSee.Parse(strUuid, null);
+
+                //JsonNode node = objectMapper.readTree(strResult);
+
+                if (structDocuseeRes.result.equals("failure")) {
+                    String strLog = "File parse failed. - " + strFileName;
+
+                    return new ResponseEntity(strLog, HttpStatus.BAD_REQUEST);
+                }
 
             } else if (strFileExt.equals("ppt") || strFileExt.equals("pptx") || strFileExt.equals("doc") || strFileExt.equals("docx")
                     || strFileExt.equals("xls") || strFileExt.equals("xlsx") || strFileExt.equals("hwp") || strFileExt.equals("hwpx")
@@ -259,7 +267,7 @@ public class RestApiCtrl {
                 _file.transferTo(fileDoc);
 
                 DParser.Upload(strUuid);
-                DparserRes structDparserRes = DParser.Upload(strUuid);
+                ParserRes structDparserRes = DParser.Upload(strUuid);
 
                 if (!structDparserRes.result.equals("success")) {
                     String strLog = "File upload failed. - " + strFileName;
@@ -280,7 +288,7 @@ public class RestApiCtrl {
 
             while (true) {
                 Thread.sleep(1000);
-                DparserRes structDparserRes = DParser.GetData(strUuid);
+                ParserRes structDparserRes = DParser.GetData(strUuid);
 
                 if (!structDparserRes.message.equals("Waiting state") && !structDparserRes.message.equals("Processing state") && !structDparserRes.message.equals("Uploading state")) {
                     break;

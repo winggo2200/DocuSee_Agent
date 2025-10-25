@@ -25,7 +25,8 @@ public class Constants {
 
     //public static String SERVER_TYPE = System.getenv("SERVER_TYPE");
 
-    public static String SERVER_ADDR_GPU = "http://218.145.184.155:33002";
+//    public static String SERVER_ADDR_GPU = "http://218.145.184.155:33002";
+    public static String SERVER_ADDR_GPU = "http://docusee.iptime.org:38020";
     public static String SERVER_MAIN_HOST = "";
     public static String SERVER_ADDR_CPU = "http://localhost:8081/api/v2/dparser"; // Default value for local testing
     //public static String SERVER_DOC_IMG = (SERVER_AGENT + "/api/v2/agent/img/get/doc?");

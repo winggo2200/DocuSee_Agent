@@ -1,6 +1,7 @@
 package com.docuseeagent.docusee;
 
 import com.docuseeagent.config.Constants;
+import com.docuseeagent.model.parser.ParserRes;
 import com.docuseeagent.model.redis.RedisDataInfo;
 import com.docuseeagent.service.RedisService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -19,6 +20,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -34,13 +37,21 @@ import java.util.List;
 
 @Component
 public class DocuSee implements HealthIndicator {
-    public static String Parse(String _strUuid, RedisService _redisService) {
+    public static ParserRes Parse(String _strUuid, RedisService _redisService) {
         String strFilePath = new File(Constants.PATH_DOC).getAbsolutePath() + "/" + _strUuid + "/GPU";
         File[] fileList = new File(strFilePath).listFiles(File::isFile);
+
+        ObjectMapper objMapper = new ObjectMapper();
 
         try {
             if (fileList != null) {
                 if (fileList.length > 0) {
+
+                    String strToken = GetToken();
+
+                    if(strToken.isEmpty())
+                        throw new Exception();
+
                     String strUploadProcUrl = Constants.SERVER_ADDR_GPU + "/api/v1/images/upload_and_process_async";
 
                     WebClient webClient = WebClient.builder().exchangeStrategies(ExchangeStrategies.builder()
@@ -49,7 +60,12 @@ public class DocuSee implements HealthIndicator {
 
                     HashMap<String, String> dictFileTaskId = new HashMap<>();
 
-                    ObjectMapper objMapper = new ObjectMapper();
+
+
+                    HashMap<String, String> dictStatusDocParse = new HashMap<>();
+                    for (File file : fileList) {
+                        dictStatusDocParse.put(file.getName(), "failure");
+                    }
 
                     for (File file : fileList) {
                         MultipartBodyBuilder multipartBodyBuilderForGPU = new MultipartBodyBuilder();
@@ -58,8 +74,12 @@ public class DocuSee implements HealthIndicator {
                         multipartBodyBuilderForGPU.part("file", resourceFile);
                         multipartBodyBuilderForGPU.part("isChartChecked", "False");
 
-                        String strRes = webClient.post().uri(strUploadProcUrl)
+//                        String strRes = webClient.post().uri(strUploadProcUrl)
+//                                .body(BodyInserters.fromMultipartData(multipartBodyBuilderForGPU.build())).retrieve().bodyToMono(String.class).block();
+
+                        String strRes = webClient.post().uri(strUploadProcUrl).header("Authorization", strToken)
                                 .body(BodyInserters.fromMultipartData(multipartBodyBuilderForGPU.build())).retrieve().bodyToMono(String.class).block();
+
 
                         JsonNode nodeResult = objMapper.readTree(strRes);
 
@@ -76,13 +96,23 @@ public class DocuSee implements HealthIndicator {
 
                             //redisData.docuseeTaskIds = List.copyOf(dictFileTaskId.keySet());
 
-                            _redisService.SetValue(_strUuid, redisData);
+                            _redisService.SetValue(_strUuid, objectMapper.writeValueAsString(redisData));
                         } catch (Exception e) {
                             _redisService.RemoveListValue(Constants.REDIS_KEY_PROC, _strUuid);
                             _redisService.DeleteValue(_strUuid);
-                            return null;
+
+                            ParserRes structParserRes = new ParserRes();
+                            structParserRes.result = "failure";
+                            structParserRes.id = _strUuid;
+                            structParserRes.message = e.getMessage();
+
+                            return structParserRes;
                         }
                     }
+
+
+
+                    //HashMap<String, String> dictResults = new HashMap<>();
 
                     for (String strTask : dictFileTaskId.keySet()) {
                         try {
@@ -95,8 +125,9 @@ public class DocuSee implements HealthIndicator {
 
                                 JsonNode nodeParseResult = objMapper.readTree(strRes);
 
+                                String strFileName = dictFileTaskId.get(strTask);
+
                                 if (nodeParseResult.get("status").asText().equals("SUCCESS")) {
-                                    String strFileName = dictFileTaskId.get(strTask);
                                     String strFileFirst = strFileName.substring(0, strFileName.lastIndexOf("."));
                                     String strFileLast = strFileName.substring(strFileName.lastIndexOf(".") + 1);
 
@@ -112,7 +143,8 @@ public class DocuSee implements HealthIndicator {
                                     fos_receive.write(strRes.getBytes());
                                     fos_receive.close();
 
-                                    JsonNode nodePages = nodeParseResult.get("results");
+                                    JsonNode nodePages = nodeParseResult.get("analyze_results");
+                                    //JsonNode nodePages = nodeParseResult.get("results");
 
                                     SslContext sslContext = SslContextBuilder.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE).build();
                                     HttpClient httpClient = HttpClient.create().secure(t -> t.sslContext(sslContext));
@@ -125,16 +157,25 @@ public class DocuSee implements HealthIndicator {
                                     List<Object> lstDocImg = new ArrayList<>();
 
                                     for (JsonNode nodePage : nodePages) {
-                                        String strPageNum = nodePage.get("page").asText();
+                                        String strPageNum = nodePage.get("page_index").asText();
+                                        //String strPageNum = nodePage.get("page").asText();
+
+
+
+
                                         //String strPageJson = nodePage.get("json_data").asText();
-                                        String strPageJson = nodePage.get("result").asText();
+
+
+                                        //String strPageJson = nodePage.get("result").asText();
+                                        JsonNode nodePagesData = nodePage.get("analyze_result");
+                                        String strPageJson = nodePagesData.asText();
 
                                         FileOutputStream fos1 = new FileOutputStream(strJsonPath + "/" + strPageNum + ".json");
                                         fos1.write(strPageJson.getBytes());
                                         fos1.close();
 
                                         //JsonNode nodePagesData = objMapper.readTree(strPageJson);
-                                        JsonNode nodePagesData = nodePage.get("result");
+
 
                                         HashMap<String, Object> dictDocData = new HashMap<>();
 
@@ -203,31 +244,82 @@ public class DocuSee implements HealthIndicator {
                                     fosFileData.write(strFileData.getBytes());
                                     fosFileData.close();
 
+                                    dictStatusDocParse.put(strFileName, "success");
+
                                     break;
-                                } else {
+                                }else if(nodeParseResult.get("status").asText().equals("EXPIRED") || nodeParseResult.get("status").asText().equals("FAILURE")) {
+                                    dictStatusDocParse.put(strFileName, nodeParseResult.get("status").asText());
+
+                                    break;
+                                }else {
                                     Thread.sleep(1000);
 
                                     long stopTime = System.currentTimeMillis();
                                     long elapsedTime = stopTime - startTime;
 
                                     if (elapsedTime > 3600000) {
-                                        return null;
+                                        dictStatusDocParse.put(strFileName, nodeParseResult.get("status").asText());
+
+                                        break;
                                     }
                                 }
                             }
                         } catch (Exception e) {
-                            throw new RuntimeException(e);
+                            ParserRes structParserRes = new ParserRes();
+                            structParserRes.result = "failure";
+                            structParserRes.id = _strUuid;
+                            structParserRes.message = e.getMessage();
+
+                            return structParserRes;
                         }
                     }
 
-                    return _strUuid;
+                    ParserRes structParserRes = new ParserRes();
+                    structParserRes.result = "success";
+                    structParserRes.id = _strUuid;
+                    structParserRes.message = objMapper.writeValueAsString(dictStatusDocParse);
+
+                    return structParserRes;
                 }
             }
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            ParserRes structParserRes = new ParserRes();
+            structParserRes.result = "failure";
+            structParserRes.id = _strUuid;
+            structParserRes.message = e.getMessage();
+
+            return structParserRes;
         }
 
-        return null;
+        ParserRes structParserRes = new ParserRes();
+        structParserRes.result = "failure";
+        structParserRes.id = _strUuid;
+        structParserRes.message = "Not found files to parse";
+
+        return structParserRes;
+    }
+
+    private static String GetToken() {
+        MultiValueMap<String, String> mapData = new LinkedMultiValueMap<>();
+        mapData.add("username", "GenApp");
+        mapData.add("password", "AppPW@!");
+
+        WebClient webClient = WebClient.builder().build();
+        String url = Constants.SERVER_ADDR_GPU + "/api/v1/users/login";
+
+        String strRes = webClient.post().uri(url).body(BodyInserters.fromFormData(mapData)).retrieve().bodyToMono(String.class).block();
+
+        ObjectMapper objMapper = new ObjectMapper();
+
+        try {
+            JsonNode nodeRoot = objMapper.readTree(strRes);
+
+            String  strToken = "bearer " + nodeRoot.get("access_token").asText();
+
+            return strToken;
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     @Override

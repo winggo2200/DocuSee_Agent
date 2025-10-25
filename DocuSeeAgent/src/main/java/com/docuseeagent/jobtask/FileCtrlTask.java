@@ -38,6 +38,12 @@ public class FileCtrlTask implements Runnable {
             try {
                 String strInfo = m_redisService.GetValue(uuid);
 
+                if (strInfo == null) {
+                    m_redisService.DeleteValue(uuid);
+                    m_redisService.RemoveListValue(_strKey, uuid);
+                    return;
+                }
+
                 RedisDataInfo info = mapper.readValue(strInfo, RedisDataInfo.class);
                 Date date = info.GetDateTime();
 

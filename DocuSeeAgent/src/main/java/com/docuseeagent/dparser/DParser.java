@@ -1,7 +1,7 @@
 package com.docuseeagent.dparser;
 
 import com.docuseeagent.config.Constants;
-import com.docuseeagent.model.dparser.DparserRes;
+import com.docuseeagent.model.parser.ParserRes;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
@@ -22,8 +22,6 @@ import reactor.core.publisher.Mono;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -31,7 +29,7 @@ import java.util.List;
 
 @Component
 public class DParser implements HealthIndicator {
-    public static DparserRes Upload(String _strUuid) {
+    public static ParserRes Upload(String _strUuid) {
         String strFilePath = new File(Constants.PATH_DOC).getAbsolutePath() + "/" + _strUuid + "/CPU";
 
         File[] fileList = new File(strFilePath).listFiles(File::isFile);
@@ -42,7 +40,7 @@ public class DParser implements HealthIndicator {
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(-1))
                 .build()).build();
 
-        DparserRes structDparserResResult = new DparserRes();
+        ParserRes structDparserResResult = new ParserRes();
 
         structDparserResResult.id = _strUuid;
 
@@ -59,11 +57,11 @@ public class DParser implements HealthIndicator {
 
                     String strResult = webClient.post().uri(strDparserAddr).body(BodyInserters.fromMultipartData(builder.build())).retrieve().bodyToMono(String.class).block();
 
-                    DparserRes structDparserRes;
+                    ParserRes structDparserRes;
 
                     ObjectMapper objMapper = new ObjectMapper();
                     try {
-                        structDparserRes = objMapper.readValue(strResult, DparserRes.class);
+                        structDparserRes = objMapper.readValue(strResult, ParserRes.class);
                     } catch (Exception e) {
                         structDparserResResult.result = "failure";
 
@@ -90,7 +88,7 @@ public class DParser implements HealthIndicator {
 
     }
 
-    public static DparserRes Parse(String _strUuid) {
+    public static ParserRes Parse(String _strUuid) {
         String strDparserAddr = Constants.SERVER_ADDR_CPU + "/parse";
 
         WebClient webClient = WebClient.builder().exchangeStrategies(ExchangeStrategies.builder()
@@ -102,13 +100,13 @@ public class DParser implements HealthIndicator {
 
         String strResult = webClient.post().uri(strDparserAddr).body(BodyInserters.fromFormData(mapBody)).retrieve().bodyToMono(String.class).block();
 
-        DparserRes structDparserResResult = new DparserRes();
+        ParserRes structDparserResResult = new ParserRes();
 
 
         ObjectMapper objMapper = new ObjectMapper();
-        DparserRes structDparserRes;
+        ParserRes structDparserRes;
         try {
-            structDparserRes = objMapper.readValue(strResult, DparserRes.class);
+            structDparserRes = objMapper.readValue(strResult, ParserRes.class);
         } catch (Exception e) {
             structDparserResResult.id = _strUuid;
             structDparserResResult.result = "failure";
@@ -120,8 +118,18 @@ public class DParser implements HealthIndicator {
         return structDparserRes;
     }
 
-    public static DparserRes GetData(String _strUuid) {
+    public static ParserRes GetData(String _strUuid) {
         ObjectMapper objMapper = new ObjectMapper();
+
+
+        File fileDoc = new File(new File(Constants.PATH_DOC).getAbsolutePath() + "/" + _strUuid + "/CPU");
+
+        File[] fileDocs = fileDoc.listFiles(File::isFile);
+
+        HashMap<String, String> dictStatusDocParse = new HashMap<>();
+        for (File file : fileDocs) {
+            dictStatusDocParse.put(file.getName(), "failure");
+        }
 
         File fileDir = new File(new File(Constants.PATH_RESULT).getAbsolutePath() + "/" + _strUuid + "/");
 
@@ -144,7 +152,7 @@ public class DParser implements HealthIndicator {
         ).block();
 
         try {
-            DparserRes structDparserRes = objMapper.readValue(strResult, DparserRes.class);
+            ParserRes structDparserRes = objMapper.readValue(strResult, ParserRes.class);
 
             if (structDparserRes.result.equals("success")) {
                 try {
@@ -162,14 +170,20 @@ public class DParser implements HealthIndicator {
                                 String strDir = file.getName();
                                 String[] astrFileName = strDir.split("_");
 
-                                lstDocFiles.add(astrFileName[0] + "." + astrFileName[1]);
+                                String strFileName = astrFileName[0] + "." + astrFileName[1];
+                                dictStatusDocParse.put(strFileName, "success");
+                                lstDocFiles.add(strFileName);
                             }
                         }
                     }
 
+
+
                     for (JsonNode nodeFiles : nodeData) {
                         for (JsonNode fileData : nodeFiles) {
                             String strFileName = fileData.get("filename").asText();
+
+                            dictStatusDocParse.put(strFileName, "success");
 
                             boolean bEnable = false;
 
@@ -323,26 +337,26 @@ public class DParser implements HealthIndicator {
                         }
                     }
 
-                    fileDirs = fileDir.listFiles(File::isDirectory);
+//                    fileDirs = fileDir.listFiles(File::isDirectory);
+//
+//                    List<Object> lstDocDatas = new ArrayList<>();
+//                    for (File file : fileDirs) {
+//                        File fileJson = new File(file.getAbsolutePath() + "/DATA/result.json");
+//
+//                        if (fileJson.exists()) {
+//                            JsonNode nodeFileData = objMapper.readTree(Files.readString(Paths.get(fileJson.getAbsolutePath())));
+//                            lstDocDatas.add(nodeFileData);
+//                        }
+//                    }
 
-                    List<Object> lstDocDatas = new ArrayList<>();
-                    for (File file : fileDirs) {
-                        File fileJson = new File(file.getAbsolutePath() + "/DATA/result.json");
+//                    HashMap<String, Object> dictResult = new HashMap<>();
+//                    dictResult.put("uuid", _strUuid);
+//                    dictResult.put("status", objMapper.writeValueAsString(dictStatusDocParse));
 
-                        if (fileJson.exists()) {
-                            JsonNode nodeFileData = objMapper.readTree(Files.readString(Paths.get(fileJson.getAbsolutePath())));
-                            lstDocDatas.add(nodeFileData);
-                        }
-                    }
-
-                    HashMap<String, Object> dictResult = new HashMap<>();
-                    dictResult.put("uuid", _strUuid);
-                    dictResult.put("docs", lstDocDatas);
-
-                    DparserRes structDparserResResult = new DparserRes();
-                    structDparserResResult.result = "success";
-                    structDparserResResult.id = _strUuid;
-                    structDparserResResult.message = objMapper.writeValueAsString(dictResult);
+                    ParserRes structParserRes = new ParserRes();
+                    structParserRes.result = "success";
+                    structParserRes.id = _strUuid;
+                    structParserRes.message = objMapper.writeValueAsString(dictStatusDocParse);
 
                     // 삭제 처리
                     String strDeleteDataAddr = Constants.SERVER_ADDR_CPU + "/data/delete/" + _strUuid;
@@ -350,21 +364,25 @@ public class DParser implements HealthIndicator {
 
                     lstDocFiles.clear();
 
-                    return structDparserResResult;
+                    return structParserRes;
 
                 } catch (Exception e) {
-                    DparserRes structDparserResResult = new DparserRes();
-                    structDparserResResult.result = "failure";
-                    structDparserResResult.id = _strUuid;
-                    structDparserResResult.message = e.getMessage();
+                    ParserRes structParserRes = new ParserRes();
+                    structParserRes.result = "failure";
+                    structParserRes.id = _strUuid;
+                    structParserRes.message = e.getMessage();
 
-                    return structDparserResResult;
+                    return structParserRes;
                 }
             } else {
-                return structDparserRes;
+                ParserRes structParserRes = new ParserRes();
+                structParserRes.result = "failure";
+                structParserRes.id = _strUuid;
+                structParserRes.message = structDparserRes.message;
+                return structParserRes;
             }
         } catch (Exception e) {
-            DparserRes structDparserResResult = new DparserRes();
+            ParserRes structDparserResResult = new ParserRes();
             structDparserResResult.result = "failure";
             structDparserResResult.id = _strUuid;
             structDparserResResult.message = e.getMessage();

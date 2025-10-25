@@ -3,9 +3,10 @@ package com.docuseeagent.jobtask;
 import com.docuseeagent.config.Constants;
 import com.docuseeagent.dparser.DParser;
 import com.docuseeagent.docusee.DocuSee;
-import com.docuseeagent.model.dparser.DparserRes;
+import com.docuseeagent.model.parser.ParserRes;
 import com.docuseeagent.model.redis.RedisDataInfo;
 import com.docuseeagent.service.RedisService;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
@@ -48,7 +49,7 @@ public class ParseTask implements Runnable {
 
                         if (fileList != null) {
                             if (fileList.length > 0) {
-                                DparserRes structDparserRes = DParser.Upload(strUuid);
+                                ParserRes structDparserRes = DParser.Upload(strUuid);
 
                                 if (!structDparserRes.result.equals("success")) {
                                     m_redisService.RemoveListValue(Constants.REDIS_KEY_PROC, strUuid);
@@ -86,13 +87,23 @@ public class ParseTask implements Runnable {
 
                         if (fileList != null) {
                             if (fileList.length > 0) {
-                                String strRes = DocuSee.Parse(strUuid, m_redisService);
+                                ParserRes structDocuseeRes = DocuSee.Parse(strUuid, m_redisService);
 
-                                if (strRes == null) {
+                                if (!structDocuseeRes.result.equals("success")) {
                                     m_redisService.RemoveListValue(Constants.REDIS_KEY_PROC, strUuid);
                                     m_redisService.DeleteValue(strUuid);
                                     m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
                                 }
+
+//                                if (structDocuseeRes == null) {
+//                                    m_redisService.RemoveListValue(Constants.REDIS_KEY_PROC, strUuid);
+//                                    m_redisService.DeleteValue(strUuid);
+//                                    m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
+//                                }else{
+//                                    JsonNode nodeResult = mapper.readTree(strRes);
+//
+//
+//                                }
                             }
                         }
 
