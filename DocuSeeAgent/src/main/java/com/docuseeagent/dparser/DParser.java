@@ -1,15 +1,18 @@
-package com.docuseeagent.docusee;
+package com.docuseeagent.dparser;
 
 import com.docuseeagent.config.Constants;
 import com.docuseeagent.model.dparser.DparserRes;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
+import org.springframework.boot.actuate.health.Health;
+import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
+import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
@@ -21,11 +24,13 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-public class DParser {
+@Component
+public class DParser implements HealthIndicator {
     public static DparserRes Upload(String _strUuid) {
         String strFilePath = new File(Constants.PATH_DOC).getAbsolutePath() + "/" + _strUuid + "/CPU";
 
@@ -366,5 +371,33 @@ public class DParser {
 
             return structDparserResResult;
         }
+    }
+
+    @Override
+    public Health health() {
+        WebClient webClient = WebClient.builder().exchangeStrategies(ExchangeStrategies.builder()
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(-1))
+                .build()).build();
+
+        String strDparserAddr = Constants.SERVER_ADDR_CPU + "/health";
+
+        try {
+            String strResult = webClient.get().uri(strDparserAddr).retrieve().bodyToMono(String.class).timeout(Duration.ofMillis(500)).block();
+
+            ObjectMapper mapper = new ObjectMapper();
+
+            JsonNode nodeResult = mapper.readTree(strResult);
+            HashMap<String, Object> dictResult = new HashMap<>();
+            dictResult.put("components", nodeResult.get("components"));
+
+            if (nodeResult.get("status").asText().equals("UP")) {
+                return Health.up().withDetails(dictResult).build();
+            }else{
+                return Health.down().withDetails(dictResult).build();
+            }
+        } catch (Exception e) {
+            return Health.down(e).withDetail("DParser", "UnAvailable").build();
+        }
+
     }
 }

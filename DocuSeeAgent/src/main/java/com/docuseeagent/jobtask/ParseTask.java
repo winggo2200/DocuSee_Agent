@@ -1,20 +1,15 @@
 package com.docuseeagent.jobtask;
 
-
 import com.docuseeagent.config.Constants;
-import com.docuseeagent.docusee.DParser;
+import com.docuseeagent.dparser.DParser;
 import com.docuseeagent.docusee.DocuSee;
 import com.docuseeagent.model.dparser.DparserRes;
 import com.docuseeagent.model.redis.RedisDataInfo;
 import com.docuseeagent.service.RedisService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 
 import java.io.File;
-import java.io.FileWriter;
-import java.io.PrintWriter;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 

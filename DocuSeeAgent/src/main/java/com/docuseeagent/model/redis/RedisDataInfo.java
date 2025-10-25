@@ -15,28 +15,15 @@ import java.util.List;
 @NoArgsConstructor
 public class RedisDataInfo {
     public String status;
-    public String dparserId;
-    public List<String> docuseeTaskIds;
     public String date;
 
-    public RedisDataInfo(String dparserId, List<String> docuseeTaskIds) {
+    public RedisDataInfo(String date) {
         this.status = "None";
-        this.dparserId = dparserId;
-        this.docuseeTaskIds = docuseeTaskIds;
-        this.date = "None";
-    }
-
-    public RedisDataInfo(String dparserId, List<String> docuseeTaskIds, String date) {
-        this.status = "None";
-        this.dparserId = dparserId;
-        this.docuseeTaskIds = docuseeTaskIds;
         this.date = date;
     }
 
-    public RedisDataInfo(String status, String dparserId, List<String> docuseeTaskIds, String date) {
+    public RedisDataInfo(String status, String date) {
         this.status = status;
-        this.dparserId = dparserId;
-        this.docuseeTaskIds = docuseeTaskIds;
         this.date = date;
     }
 

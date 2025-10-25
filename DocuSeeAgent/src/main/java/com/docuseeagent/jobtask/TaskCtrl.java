@@ -1,6 +1,5 @@
 package com.docuseeagent.jobtask;
 
-
 import com.docuseeagent.service.RedisService;
 import lombok.extern.slf4j.Slf4j;
 

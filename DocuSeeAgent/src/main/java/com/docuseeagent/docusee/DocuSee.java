@@ -9,6 +9,8 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
+import org.springframework.boot.actuate.health.Health;
+import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
@@ -16,6 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -25,14 +28,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-public class DocuSee {
+@Component
+public class DocuSee implements HealthIndicator {
     public static String Parse(String _strUuid, RedisService _redisService) {
         String strFilePath = new File(Constants.PATH_DOC).getAbsolutePath() + "/" + _strUuid + "/GPU";
         File[] fileList = new File(strFilePath).listFiles(File::isFile);
@@ -67,23 +68,21 @@ public class DocuSee {
                         dictFileTaskId.put(strTaskId, file.getName());
                     }
 
+                    if(_redisService != null) {
+                        String strData = _redisService.GetValue(_strUuid);
+                        ObjectMapper objectMapper = new ObjectMapper();
+                        try {
+                            RedisDataInfo redisData = objectMapper.readValue(strData, RedisDataInfo.class);
 
+                            //redisData.docuseeTaskIds = List.copyOf(dictFileTaskId.keySet());
 
-                    String strData = _redisService.GetValue(_strUuid);
-                    ObjectMapper objectMapper = new ObjectMapper();
-                    try {
-                        RedisDataInfo redisData = objectMapper.readValue(strData, RedisDataInfo.class);
-
-                        redisData.docuseeTaskIds = List.copyOf(dictFileTaskId.keySet());
-
-                        _redisService.SetValue(_strUuid, redisData);
-                    } catch (Exception e) {
-                        _redisService.RemoveListValue(Constants.REDIS_KEY_PROC, _strUuid);
-                        _redisService.DeleteValue(_strUuid);
-                        return null;
+                            _redisService.SetValue(_strUuid, redisData);
+                        } catch (Exception e) {
+                            _redisService.RemoveListValue(Constants.REDIS_KEY_PROC, _strUuid);
+                            _redisService.DeleteValue(_strUuid);
+                            return null;
+                        }
                     }
-
-
 
                     for (String strTask : dictFileTaskId.keySet()) {
                         try {
@@ -212,7 +211,6 @@ public class DocuSee {
                                     long elapsedTime = stopTime - startTime;
 
                                     if (elapsedTime > 3600000) {
-
                                         return null;
                                     }
                                 }
@@ -230,5 +228,14 @@ public class DocuSee {
         }
 
         return null;
+    }
+
+    @Override
+    public Health health() {
+        WebClient webClient = WebClient.builder().exchangeStrategies(ExchangeStrategies.builder()
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(-1))
+                .build()).build();
+
+        return Health.up().withDetail("DocuSee", "UnAvailable").build();
     }
 }
