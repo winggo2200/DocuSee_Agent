@@ -2,8 +2,10 @@ package com.docuseeagent.dparser;
 
 import com.docuseeagent.config.Constants;
 import com.docuseeagent.model.parser.ParserRes;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
@@ -27,6 +29,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+@Slf4j
 @Component
 public class DParser implements HealthIndicator {
     public static ParserRes Upload(String _strUuid) {
@@ -44,6 +47,8 @@ public class DParser implements HealthIndicator {
 
         structDparserResResult.id = _strUuid;
 
+        ObjectMapper objMapper = new ObjectMapper();
+
         if (fileList != null) {
             if (fileList.length > 0) {
                 for (File file : fileList) {
@@ -59,7 +64,7 @@ public class DParser implements HealthIndicator {
 
                     ParserRes structDparserRes;
 
-                    ObjectMapper objMapper = new ObjectMapper();
+
                     try {
                         structDparserRes = objMapper.readValue(strResult, ParserRes.class);
                     } catch (Exception e) {
@@ -71,6 +76,11 @@ public class DParser implements HealthIndicator {
                     }
 
                     if (!structDparserRes.result.equals("success")) {
+                        try {
+                            log.error(objMapper.writeValueAsString(structDparserRes));
+                        } catch (JsonProcessingException e) {
+                            throw new RuntimeException(e);
+                        }
                         return structDparserRes;
                     }
                 }
@@ -78,12 +88,26 @@ public class DParser implements HealthIndicator {
                 structDparserResResult.result = "failure";
                 structDparserResResult.message = "No files to upload.";
 
+                try {
+                    log.error(objMapper.writeValueAsString(structDparserResResult));
+                } catch (JsonProcessingException e) {
+                    throw new RuntimeException(e);
+                }
+
                 return structDparserResResult;
             }
         }
 
         structDparserResResult.result = "success";
         structDparserResResult.message = "Upload success.";
+
+        try {
+            log.info(objMapper.writeValueAsString(structDparserResResult));
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+
+
         return structDparserResResult;
 
     }
@@ -100,19 +124,30 @@ public class DParser implements HealthIndicator {
 
         String strResult = webClient.post().uri(strDparserAddr).body(BodyInserters.fromFormData(mapBody)).retrieve().bodyToMono(String.class).block();
 
-        ParserRes structDparserResResult = new ParserRes();
-
-
         ObjectMapper objMapper = new ObjectMapper();
         ParserRes structDparserRes;
         try {
             structDparserRes = objMapper.readValue(strResult, ParserRes.class);
         } catch (Exception e) {
+            ParserRes structDparserResResult = new ParserRes();
+
             structDparserResResult.id = _strUuid;
             structDparserResResult.result = "failure";
             structDparserResResult.message = e.getMessage();
 
+            try {
+                log.info(objMapper.writeValueAsString(structDparserResResult));
+            } catch (JsonProcessingException ex) {
+                throw new RuntimeException(ex);
+            }
+
             return structDparserResResult;
+        }
+
+        try {
+            log.info(objMapper.writeValueAsString(structDparserRes));
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
         }
 
         return structDparserRes;
@@ -177,8 +212,6 @@ public class DParser implements HealthIndicator {
                         }
                     }
 
-
-
                     for (JsonNode nodeFiles : nodeData) {
                         for (JsonNode fileData : nodeFiles) {
                             String strFileName = fileData.get("filename").asText();
@@ -217,9 +250,6 @@ public class DParser implements HealthIndicator {
                                 FileUtils.forceMkdir(new File(strImgPath));
 
                             JsonNode nodePages = fileData.get("pages");
-
-                            int idx = 1;
-
 
                             // resource image
                             mapBody.clear();
@@ -364,6 +394,8 @@ public class DParser implements HealthIndicator {
 
                     lstDocFiles.clear();
 
+                    log.info(objMapper.writeValueAsString(structParserRes));
+
                     return structParserRes;
 
                 } catch (Exception e) {
@@ -371,6 +403,8 @@ public class DParser implements HealthIndicator {
                     structParserRes.result = "failure";
                     structParserRes.id = _strUuid;
                     structParserRes.message = e.getMessage();
+
+                    log.error(objMapper.writeValueAsString(structParserRes));
 
                     return structParserRes;
                 }
@@ -386,6 +420,12 @@ public class DParser implements HealthIndicator {
             structDparserResResult.result = "failure";
             structDparserResResult.id = _strUuid;
             structDparserResResult.message = e.getMessage();
+
+            try {
+                log.error(objMapper.writeValueAsString(structDparserResResult));
+            } catch (JsonProcessingException ex) {
+                throw new RuntimeException(ex);
+            }
 
             return structDparserResResult;
         }

@@ -5,6 +5,7 @@ import com.docuseeagent.config.Constants;
 import com.docuseeagent.model.redis.RedisDataInfo;
 import com.docuseeagent.service.RedisService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 
 import java.io.File;
@@ -12,6 +13,7 @@ import java.io.IOException;
 import java.util.Date;
 import java.util.List;
 
+@Slf4j
 public class FileCtrlTask implements Runnable {
     private RedisService m_redisService;
 
@@ -59,8 +61,11 @@ public class FileCtrlTask implements Runnable {
 
                     if (fileDocSrc.exists()) FileUtils.deleteDirectory(fileDocSrc);
 
+                    log.info("Delete uuid file : " + uuid);
+
                 }
             } catch (IOException e) {
+                log.error(e.getMessage());
                 throw new RuntimeException(e);
             }
         });

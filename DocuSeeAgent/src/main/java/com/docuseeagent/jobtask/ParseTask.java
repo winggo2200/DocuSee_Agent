@@ -31,7 +31,10 @@ public class ParseTask implements Runnable {
             //System.out.println("thread id : " + m_nParserId + " - Scheduler 처리");
             ObjectMapper mapper = new ObjectMapper();
 
+            ObjectMapper objectMapper = new ObjectMapper();
+
             String strData = m_redisService.GetValue(strUuid);
+
 
             if (strData != null) {
                 if (!strData.isEmpty()) {
@@ -78,7 +81,12 @@ public class ParseTask implements Runnable {
                                     m_redisService.RemoveListValue(Constants.REDIS_KEY_PROC, strUuid);
                                     m_redisService.DeleteValue(strUuid);
                                     m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
+
+
                                 }
+
+
+                                log.info(objectMapper.writeValueAsString(structDparserRes) );
                             }
                         }
 
@@ -95,6 +103,8 @@ public class ParseTask implements Runnable {
                                     m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
                                 }
 
+                                log.info(objectMapper.writeValueAsString(structDocuseeRes) );
+
 //                                if (structDocuseeRes == null) {
 //                                    m_redisService.RemoveListValue(Constants.REDIS_KEY_PROC, strUuid);
 //                                    m_redisService.DeleteValue(strUuid);
@@ -108,7 +118,6 @@ public class ParseTask implements Runnable {
                         }
 
                         String strDataInfo = m_redisService.GetValue(strUuid);
-                        ObjectMapper objectMapper = new ObjectMapper();
                         Thread.sleep(1000);
                         RedisDataInfo redisData = objectMapper.readValue(strDataInfo, RedisDataInfo.class);
 
@@ -122,17 +131,22 @@ public class ParseTask implements Runnable {
                         m_redisService.RightPushValue(Constants.REDIS_KEY_COMPLETED, strUuid);
                         m_redisService.RemoveListValue(Constants.REDIS_KEY_PROC, strUuid);
 
+
+
                     } catch (Exception e) {
                         m_redisService.RemoveListValue(Constants.REDIS_KEY_PROC, strUuid);
                         m_redisService.DeleteValue(strUuid);
                         m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
 
+                        log.error(e.getMessage());
                         throw new RuntimeException(e);
 
                     } finally {
 
                     }
                 }
+            }else{
+
             }
         }
     }

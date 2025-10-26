@@ -4,11 +4,13 @@ import com.docuseeagent.config.Constants;
 import com.docuseeagent.model.parser.ParserRes;
 import com.docuseeagent.model.redis.RedisDataInfo;
 import com.docuseeagent.service.RedisService;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
@@ -31,10 +33,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+@Slf4j
 @Component
 public class DocuSee implements HealthIndicator {
     public static ParserRes Parse(String _strUuid, RedisService _redisService) {
@@ -46,12 +50,6 @@ public class DocuSee implements HealthIndicator {
         try {
             if (fileList != null) {
                 if (fileList.length > 0) {
-
-                    String strToken = GetToken();
-
-                    if(strToken.isEmpty())
-                        throw new Exception();
-
                     String strUploadProcUrl = Constants.SERVER_ADDR_GPU + "/api/v1/images/upload_and_process_async";
 
                     WebClient webClient = WebClient.builder().exchangeStrategies(ExchangeStrategies.builder()
@@ -59,8 +57,6 @@ public class DocuSee implements HealthIndicator {
                             .build()).build();
 
                     HashMap<String, String> dictFileTaskId = new HashMap<>();
-
-
 
                     HashMap<String, String> dictStatusDocParse = new HashMap<>();
                     for (File file : fileList) {
@@ -77,7 +73,7 @@ public class DocuSee implements HealthIndicator {
 //                        String strRes = webClient.post().uri(strUploadProcUrl)
 //                                .body(BodyInserters.fromMultipartData(multipartBodyBuilderForGPU.build())).retrieve().bodyToMono(String.class).block();
 
-                        String strRes = webClient.post().uri(strUploadProcUrl).header("Authorization", strToken)
+                        String strRes = webClient.post().uri(strUploadProcUrl)
                                 .body(BodyInserters.fromMultipartData(multipartBodyBuilderForGPU.build())).retrieve().bodyToMono(String.class).block();
 
 
@@ -106,11 +102,11 @@ public class DocuSee implements HealthIndicator {
                             structParserRes.id = _strUuid;
                             structParserRes.message = e.getMessage();
 
+                            log.error(objectMapper.writeValueAsString(structParserRes));
+
                             return structParserRes;
                         }
                     }
-
-
 
                     //HashMap<String, String> dictResults = new HashMap<>();
 
@@ -143,8 +139,8 @@ public class DocuSee implements HealthIndicator {
                                     fos_receive.write(strRes.getBytes());
                                     fos_receive.close();
 
-                                    JsonNode nodePages = nodeParseResult.get("analyze_results");
-                                    //JsonNode nodePages = nodeParseResult.get("results");
+                                    //JsonNode nodePages = nodeParseResult.get("analyze_results");
+                                    JsonNode nodePages = nodeParseResult.get("results");
 
                                     SslContext sslContext = SslContextBuilder.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE).build();
                                     HttpClient httpClient = HttpClient.create().secure(t -> t.sslContext(sslContext));
@@ -167,7 +163,7 @@ public class DocuSee implements HealthIndicator {
 
 
                                         //String strPageJson = nodePage.get("result").asText();
-                                        JsonNode nodePagesData = nodePage.get("analyze_result");
+                                        JsonNode nodePagesData = nodePage.get("result");
                                         String strPageJson = nodePagesData.asText();
 
                                         FileOutputStream fos1 = new FileOutputStream(strJsonPath + "/" + strPageNum + ".json");
@@ -187,7 +183,7 @@ public class DocuSee implements HealthIndicator {
                                         dictAnalyData.put("unit", nodePagesData.get("unit"));
                                         dictAnalyData.put("paragraphs", nodePagesData.get("paragraphs"));
                                         //dictAnalyData.put("lines", nodePagesData.get("lines"));
-                                        //dictAnalyData.put("chart", nodePagesData.get("chart"));
+                                        dictAnalyData.put("chart", nodePagesData.get("chart"));
 
                                         //HashMap<String, Object> dictTable = new HashMap<>();
                                         List<Object> lstTables = new ArrayList<>();
@@ -250,6 +246,13 @@ public class DocuSee implements HealthIndicator {
                                 }else if(nodeParseResult.get("status").asText().equals("EXPIRED") || nodeParseResult.get("status").asText().equals("FAILURE")) {
                                     dictStatusDocParse.put(strFileName, nodeParseResult.get("status").asText());
 
+                                    ParserRes structParserRes = new ParserRes();
+                                    structParserRes.result = "failure";
+                                    structParserRes.id = _strUuid;
+                                    structParserRes.message = strFileName + " - parsing " + nodeParseResult.get("status").asText();
+
+                                    log.info(objMapper.writeValueAsString(structParserRes));
+
                                     break;
                                 }else {
                                     Thread.sleep(1000);
@@ -259,6 +262,13 @@ public class DocuSee implements HealthIndicator {
 
                                     if (elapsedTime > 3600000) {
                                         dictStatusDocParse.put(strFileName, nodeParseResult.get("status").asText());
+
+                                        ParserRes structParserRes = new ParserRes();
+                                        structParserRes.result = "failure";
+                                        structParserRes.id = _strUuid;
+                                        structParserRes.message = strFileName + " - parsing : timeout";
+
+                                        log.info(objMapper.writeValueAsString(structParserRes));
 
                                         break;
                                     }
@@ -270,6 +280,8 @@ public class DocuSee implements HealthIndicator {
                             structParserRes.id = _strUuid;
                             structParserRes.message = e.getMessage();
 
+                            log.info(objMapper.writeValueAsString(structParserRes));
+
                             return structParserRes;
                         }
                     }
@@ -278,6 +290,8 @@ public class DocuSee implements HealthIndicator {
                     structParserRes.result = "success";
                     structParserRes.id = _strUuid;
                     structParserRes.message = objMapper.writeValueAsString(dictStatusDocParse);
+
+                    log.info(objMapper.writeValueAsString(structParserRes));
 
                     return structParserRes;
                 }
@@ -288,6 +302,12 @@ public class DocuSee implements HealthIndicator {
             structParserRes.id = _strUuid;
             structParserRes.message = e.getMessage();
 
+            try {
+                log.info(objMapper.writeValueAsString(structParserRes));
+            } catch (JsonProcessingException ex) {
+                throw new RuntimeException(ex);
+            }
+
             return structParserRes;
         }
 
@@ -296,30 +316,13 @@ public class DocuSee implements HealthIndicator {
         structParserRes.id = _strUuid;
         structParserRes.message = "Not found files to parse";
 
-        return structParserRes;
-    }
-
-    private static String GetToken() {
-        MultiValueMap<String, String> mapData = new LinkedMultiValueMap<>();
-        mapData.add("username", "GenApp");
-        mapData.add("password", "AppPW@!");
-
-        WebClient webClient = WebClient.builder().build();
-        String url = Constants.SERVER_ADDR_GPU + "/api/v1/users/login";
-
-        String strRes = webClient.post().uri(url).body(BodyInserters.fromFormData(mapData)).retrieve().bodyToMono(String.class).block();
-
-        ObjectMapper objMapper = new ObjectMapper();
-
         try {
-            JsonNode nodeRoot = objMapper.readTree(strRes);
-
-            String  strToken = "bearer " + nodeRoot.get("access_token").asText();
-
-            return strToken;
-        } catch (Exception e) {
-            return "";
+            log.info(objMapper.writeValueAsString(structParserRes));
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
         }
+
+        return structParserRes;
     }
 
     @Override
@@ -328,6 +331,22 @@ public class DocuSee implements HealthIndicator {
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(-1))
                 .build()).build();
 
-        return Health.up().withDetail("DocuSee", "UnAvailable").build();
+        String strDocuseeAddr = Constants.SERVER_ADDR_GPU + "/health";
+
+        try {
+            String strResult = webClient.get().uri(strDocuseeAddr).retrieve().bodyToMono(String.class).timeout(Duration.ofMillis(500)).block();
+
+            if (strResult.equals("OK")) {
+                return Health.up().withDetail("DocuSee", "Available").build();
+            }else{
+                return Health.down().withDetail("DocuSee", "UnAvailable").build();
+            }
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+
+
     }
 }

@@ -7,9 +7,11 @@ import com.docuseeagent.jobtask.TaskCtrl;
 import com.docuseeagent.model.parser.ParserRes;
 import com.docuseeagent.model.redis.RedisDataInfo;
 import com.docuseeagent.service.RedisService;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -32,6 +34,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 public class RestApiCtrl {
@@ -48,7 +51,7 @@ public class RestApiCtrl {
         //m_redisService.DeleteList(Constants.REDIS_KEY_PROC);
         //m_redisService.DeleteList(Constants.REDIS_KEY_COMPLETED);
 
-
+        log.info("init");
         String strProcUuid = m_redisService.RightPopValue(Constants.REDIS_KEY_PROC, String.class);
 
         ObjectMapper mapper = new ObjectMapper();
@@ -96,13 +99,37 @@ public class RestApiCtrl {
             if (_bAdd != null) bAdd = _bAdd;
         }
 
+        ParserRes structParserRes = new ParserRes();
+
         String strFilePath = new File(Constants.PATH_DOC).getAbsolutePath() + "/" + strUuid + "/";
 
         if (_strUuid != null) {
-            if (m_redisService.HasValue(Constants.REDIS_KEY_PROC, _strUuid))
-                return new ResponseEntity("The document is being processed.", HttpStatus.BAD_REQUEST);
-            else if (m_redisService.HasValue(Constants.REDIS_KEY_COMPLETED, _strUuid))
-                return new ResponseEntity("The document has been processed.", HttpStatus.BAD_REQUEST);
+            if (m_redisService.HasValue(Constants.REDIS_KEY_PROC, _strUuid)) {
+                structParserRes.result = "failure";
+                structParserRes.id = strUuid;
+                structParserRes.message = "The document is being processed.";
+
+                try {
+                    log.info(objectMapper.writeValueAsString(structParserRes) );
+                    return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.OK);
+                } catch (JsonProcessingException e) {
+                    log.error(e.getMessage());
+                    throw new RuntimeException(e);
+                }
+            }
+            else if (m_redisService.HasValue(Constants.REDIS_KEY_COMPLETED, _strUuid)) {
+                structParserRes.result = "failure";
+                structParserRes.id = strUuid;
+                structParserRes.message = "The document parsing is completed.";
+
+                try {
+                    log.info(objectMapper.writeValueAsString(structParserRes));
+                    return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.OK);
+                } catch (JsonProcessingException e) {
+                    log.error(e.getMessage());
+                    throw new RuntimeException(e);
+                }
+            }
 
             File fileDocDir = new File(strFilePath);
             try {
@@ -110,6 +137,7 @@ public class RestApiCtrl {
                     if (!bAdd) FileUtils.cleanDirectory(fileDocDir);
                 }
             } catch (Exception e) {
+                log.error(e.getMessage());
                 throw new RuntimeException(e);
             }
         }
@@ -125,6 +153,8 @@ public class RestApiCtrl {
             if (!fileGPU.exists()) {
                 FileUtils.forceMkdir(fileGPU);
             }
+
+            List<String> lstFileList = new ArrayList<>();
 
             for (MultipartFile file : _files) {
                 String strFileName = file.getOriginalFilename();
@@ -143,7 +173,21 @@ public class RestApiCtrl {
                         || strFileExt.equals("csv")) {
                     File fileDoc = new File(fileCPU.getAbsolutePath() + "/" + file.getOriginalFilename());
                     file.transferTo(fileDoc);
+                }else{
+                    lstFileList.add(file.getOriginalFilename());
                 }
+            }
+
+            if(_files.length == lstFileList.size()){
+                structParserRes.result = "failure";
+                structParserRes.id = strUuid;
+                structParserRes.message = "No supported files.";
+
+                m_redisService.RemoveListValue(Constants.REDIS_KEY_UPLOAD, strUuid);
+
+                log.warn(objectMapper.writeValueAsString(structParserRes) );
+
+                return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.OK);
             }
 
             RedisDataInfo redisDataInfo = new RedisDataInfo();
@@ -157,11 +201,22 @@ public class RestApiCtrl {
             m_redisService.SetValue(strUuid, mapper.writeValueAsString(redisDataInfo));
 
             //if (m_redisService.HasValue(Constants.REDIS_KEY_UPLOAD, strUuid) != null)
-                m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
+            m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
 
-            return new ResponseEntity(strUuid, HttpStatus.OK);
+            structParserRes.result = "success";
+            structParserRes.id = strUuid;
+            structParserRes.message = "Upload completed.";
+
+            if (!lstFileList.isEmpty()) {
+                structParserRes.message += " Not supported files: " + String.join(", ", lstFileList);
+            }
+
+            log.info(objectMapper.writeValueAsString(structParserRes) );
+
+            return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.OK);
         } catch (IOException e) {
             m_redisService.RemoveListValue(Constants.REDIS_KEY_UPLOAD, strUuid);
+            log.error(e.getMessage());
             throw new RuntimeException(e);
         }
     }
@@ -171,6 +226,10 @@ public class RestApiCtrl {
     private ResponseEntity ParseDocFiles(@RequestHeader HttpHeaders _header,
                                          @RequestParam("uuid") String _strUuid) {
         String strData = m_redisService.GetValue(_strUuid);
+
+        ParserRes structParserRes = new ParserRes();
+        structParserRes.id = _strUuid;
+
         if (strData != null) {
             if (!strData.isEmpty()) {
                 try {
@@ -194,21 +253,43 @@ public class RestApiCtrl {
                             dataInfo.status = Constants.REDIS_STATUS_UPLOAD;
                             m_redisService.SetValue(_strUuid, mapper.writeValueAsString(dataInfo));
 
-                            return new ResponseEntity("Fail to add waiting queue", HttpStatus.OK);
+                            structParserRes.result = "failure";
+                            structParserRes.message = "Fail to add waiting queue.";
+                            log.warn(objectMapper.writeValueAsString(structParserRes) );
+
+                            return new ResponseEntity(objectMapper.writeValueAsString(structParserRes) , HttpStatus.OK);
                         }
                     } else { // upload 이외의 상태
-                        return new ResponseEntity(strStatus, HttpStatus.OK);
+                        structParserRes.result = "failure";
+                        structParserRes.message = strStatus;
+                        log.warn(objectMapper.writeValueAsString(structParserRes));
+                        return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.OK);
                     }
                 } catch (Exception e) {
+                    log.error(e.getMessage());
                     return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
                 }
             }
 
-            return new ResponseEntity(_strUuid, HttpStatus.OK);
+            structParserRes.result = "success";
+            structParserRes.message = "Add waiting queue";
+
+            try {
+                log.warn(objectMapper.writeValueAsString(structParserRes));
+                return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.OK);
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException(e);
+            }
         }
 
-        return new ResponseEntity("No uploaded data found.", HttpStatus.BAD_REQUEST);
-
+        structParserRes.result = "failure";
+        structParserRes.message = "No uploaded data found.";
+        try {
+            log.warn(objectMapper.writeValueAsString(structParserRes));
+            return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @CrossOrigin(origins = "*")
@@ -224,7 +305,7 @@ public class RestApiCtrl {
                 FileUtils.cleanDirectory(fileDocDir);
             }
         } catch (Exception e) {
-
+            log.error(e.getMessage());
             throw new RuntimeException(e);
         }
 
@@ -257,7 +338,10 @@ public class RestApiCtrl {
                 if (structDocuseeRes.result.equals("failure")) {
                     String strLog = "File parse failed. - " + strFileName;
 
-                    return new ResponseEntity(strLog, HttpStatus.BAD_REQUEST);
+                    structDocuseeRes.message = strLog;
+                    log.warn(objectMapper.writeValueAsString(structDocuseeRes));
+
+                    return new ResponseEntity(objectMapper.writeValueAsString(structDocuseeRes), HttpStatus.OK);
                 }
 
             } else if (strFileExt.equals("ppt") || strFileExt.equals("pptx") || strFileExt.equals("doc") || strFileExt.equals("docx")
@@ -270,20 +354,34 @@ public class RestApiCtrl {
                 ParserRes structDparserRes = DParser.Upload(strUuid);
 
                 if (!structDparserRes.result.equals("success")) {
+
                     String strLog = "File upload failed. - " + strFileName;
 
-                    return new ResponseEntity(strLog, HttpStatus.BAD_REQUEST);
+                    structDparserRes.message = strLog;
+                    log.warn(objectMapper.writeValueAsString(structDparserRes));
+
+                    return new ResponseEntity(objectMapper.writeValueAsString(structDparserRes), HttpStatus.OK);
                 }
-                DParser.Parse(strUuid);
+                structDparserRes = DParser.Parse(strUuid);
+
                 if (!structDparserRes.result.equals("success")) {
+
                     String strLog = "File parse failed. - " + strFileName;
 
-                    return new ResponseEntity(strLog, HttpStatus.BAD_REQUEST);
+                    structDparserRes.message = strLog;
+                    log.warn(objectMapper.writeValueAsString(structDparserRes));
+
+                    return new ResponseEntity(objectMapper.writeValueAsString(structDparserRes), HttpStatus.OK);
                 }
             } else {
-                String strLog = "Not supported file. - " + strFileName;
+                ParserRes structParserRes = new ParserRes();
+                structParserRes.result = "failure";
+                structParserRes.id = strUuid;
+                structParserRes.message = "Not supported file. - " + strFileName;
 
-                return new ResponseEntity(strLog, HttpStatus.BAD_REQUEST);
+                log.warn(objectMapper.writeValueAsString(structParserRes));
+
+                return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
             }
 
             while (true) {
@@ -294,7 +392,6 @@ public class RestApiCtrl {
                     break;
                 }
             }
-
 
             File fileDir = new File(new File(Constants.PATH_RESULT).getAbsolutePath() + "/" + strUuid + "/");
 
@@ -321,12 +418,26 @@ public class RestApiCtrl {
 
                 String strRes = objMapper.writeValueAsString(dictResult);
 
-                return new ResponseEntity(strRes, HttpStatus.OK);
+                ParserRes structParserRes = new ParserRes();
+                structParserRes.result = "success";
+                structParserRes.id = strUuid;
+                structParserRes.message = strRes;
+
+                log.info("File parse completed. - " + strUuid);
+
+                return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.OK);
             } else {
-                return new ResponseEntity("No processed data found.", HttpStatus.BAD_REQUEST);
+
+                ParserRes structParserRes = new ParserRes();
+                structParserRes.result = "success";
+                structParserRes.id = strUuid;
+                structParserRes.message = "File parse failed. - " + strUuid;
+
+                log.error(objectMapper.writeValueAsString(structParserRes));
+                return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
             }
         } catch (Exception e) {
-
+            log.error(e.getMessage());
             throw new RuntimeException(e);
         }
     }
@@ -337,6 +448,9 @@ public class RestApiCtrl {
     public ResponseEntity GetDocData(@RequestParam("uuid") String _strUuid) {
         String strData = m_redisService.GetValue(_strUuid);
 
+        ParserRes structParserRes = new ParserRes();
+        structParserRes.id = _strUuid;
+
         if (strData != null) {
             if (!strData.isEmpty()) {
                 try {
@@ -346,13 +460,25 @@ public class RestApiCtrl {
 
                     switch (info.status) {
                         case Constants.REDIS_STATUS_UPLOAD -> {
-                            return new ResponseEntity("Upload state", HttpStatus.BAD_REQUEST);
+                            structParserRes.result = "failure";
+                            structParserRes.message = "Upload state.";
+
+                            log.error(objectMapper.writeValueAsString(structParserRes));
+                            return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
                         }
                         case Constants.REDIS_STATUS_WAIT -> {
-                            return new ResponseEntity("Waiting state", HttpStatus.BAD_REQUEST);
+                            structParserRes.result = "failure";
+                            structParserRes.message = "Wait state.";
+
+                            log.error(objectMapper.writeValueAsString(structParserRes));
+                            return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
                         }
                         case Constants.REDIS_STATUS_PROC -> {
-                            return new ResponseEntity("Processing state", HttpStatus.BAD_REQUEST);
+                            structParserRes.result = "failure";
+                            structParserRes.message = "Processing state.";
+
+                            log.error(objectMapper.writeValueAsString(structParserRes));
+                            return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
                         }
                         case Constants.REDIS_STATUS_COMPLETED -> {
                             File fileDir = new File(new File(Constants.PATH_RESULT).getAbsolutePath() + "/" + _strUuid + "/");
@@ -378,18 +504,36 @@ public class RestApiCtrl {
 
                                 String strRes = objMapper.writeValueAsString(dictResult);
 
-                                return new ResponseEntity(strRes, HttpStatus.OK);
+                                structParserRes.result = "success";
+                                structParserRes.message = strRes;
+
+                                log.error(objectMapper.writeValueAsString(structParserRes));
+                                return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.OK);
+
                             } else {
-                                return new ResponseEntity("No processed data found.", HttpStatus.BAD_REQUEST);
+                                structParserRes.result = "failure";
+                                structParserRes.message = "File parse failed.";
+
+                                log.error(objectMapper.writeValueAsString(structParserRes));
+                                return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
                             }
                         }
                     }
                 } catch (Exception e) {
+                    log.error(e.getMessage());
                     return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
                 }
             }
         }
-        return new ResponseEntity("No processed data found.", HttpStatus.BAD_REQUEST);
+        structParserRes.result = "failure";
+        structParserRes.message = "No processed data found.";
+
+        try {
+            log.error(objectMapper.writeValueAsString(structParserRes));
+            return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
     }
 
 
@@ -404,6 +548,7 @@ public class RestApiCtrl {
         } else {
             String strLog = "Not found. " + _strFileName;
 
+            log.error(strLog);
             return new ResponseEntity("Not found.", HttpStatus.BAD_REQUEST);
         }
 
@@ -422,6 +567,8 @@ public class RestApiCtrl {
             strImgPath += _strFileName.substring(0, _strFileName.lastIndexOf(".")) + "_" + _strFileName.substring(_strFileName.lastIndexOf(".") + 1);
         } else {
             String strLog = "Not found doc image. - " + _strFileName + "\n";
+
+            log.error(strLog);
 
             return new ResponseEntity(strLog, HttpStatus.BAD_REQUEST);
         }
@@ -446,9 +593,11 @@ public class RestApiCtrl {
             else
                 header.add("Content-type", Files.probeContentType(Paths.get(_strSrcFile)));
         } catch (Exception e) {
+            log.error(e.getMessage());
             return new ResponseEntity<Resource>(HttpStatus.BAD_REQUEST);
         }
 
+        log.info("Load file completed. - " + _strSrcFile);
         return new ResponseEntity<Resource>(resourceFile, header, HttpStatus.OK);
     }
 
