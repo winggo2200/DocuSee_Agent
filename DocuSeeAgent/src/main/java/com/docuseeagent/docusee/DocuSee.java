@@ -153,7 +153,7 @@ public class DocuSee implements HealthIndicator {
                                     List<Object> lstDocImg = new ArrayList<>();
 
                                     for (JsonNode nodePage : nodePages) {
-                                        String strPageNum = nodePage.get("page_index").asText();
+                                        String strPageNum = nodePage.get("page").asText();
                                         //String strPageNum = nodePage.get("page").asText();
 
 
@@ -183,7 +183,7 @@ public class DocuSee implements HealthIndicator {
                                         dictAnalyData.put("unit", nodePagesData.get("unit"));
                                         dictAnalyData.put("paragraphs", nodePagesData.get("paragraphs"));
                                         //dictAnalyData.put("lines", nodePagesData.get("lines"));
-                                        dictAnalyData.put("chart", nodePagesData.get("chart"));
+                                        dictAnalyData.put("charts", nodePagesData.get("charts"));
 
                                         //HashMap<String, Object> dictTable = new HashMap<>();
                                         List<Object> lstTables = new ArrayList<>();
@@ -235,7 +235,7 @@ public class DocuSee implements HealthIndicator {
                                     dictResultDoc.put("pages", lstResults);
                                     dictResultDoc.put("page_image_urls", lstDocImg);
 
-                                    FileOutputStream fosFileData = new FileOutputStream(strJsonPath + "/all_data.json");
+                                    FileOutputStream fosFileData = new FileOutputStream(strJsonPath + "/result.json");
                                     String strFileData = objMapper.writeValueAsString(dictResultDoc);
                                     fosFileData.write(strFileData.getBytes());
                                     fosFileData.close();
@@ -331,19 +331,19 @@ public class DocuSee implements HealthIndicator {
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(-1))
                 .build()).build();
 
-        String strDocuseeAddr = Constants.SERVER_ADDR_GPU + "/health";
+        String strDocuseeAddr = Constants.SERVER_ADDR_GPU + "/api/v1/health";
 
         try {
             String strResult = webClient.get().uri(strDocuseeAddr).retrieve().bodyToMono(String.class).timeout(Duration.ofMillis(500)).block();
 
-            if (strResult.equals("OK")) {
+            if (strResult.equals("\"OK\"")) {
                 return Health.up().withDetail("DocuSee", "Available").build();
             }else{
                 return Health.down().withDetail("DocuSee", "UnAvailable").build();
             }
 
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            return Health.down().withDetail("DocuSee", "UnAvailable").build();
         }
 
 

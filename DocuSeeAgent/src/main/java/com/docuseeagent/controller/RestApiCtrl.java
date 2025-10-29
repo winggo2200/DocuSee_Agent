@@ -163,12 +163,13 @@ public class RestApiCtrl {
 
                 strFileExt = strFileExt.toLowerCase();
 
-                if (strFileExt.equals("pdf") || strFileExt.equals("jpg") || strFileExt.equals("jpeg")
+                if (strFileExt.equals("ppt") || strFileExt.equals("pptx") ||
+                        strFileExt.equals("pdf") || strFileExt.equals("jpg") || strFileExt.equals("jpeg")
                         || strFileExt.equals("tiff") || strFileExt.equals("png") || strFileExt.equals("tif")) {
                     File fileDoc = new File(fileGPU.getAbsolutePath() + "/" + file.getOriginalFilename());
                     file.transferTo(fileDoc);
 
-                } else if (strFileExt.equals("ppt") || strFileExt.equals("pptx") || strFileExt.equals("doc") || strFileExt.equals("docx")
+                } else if ( strFileExt.equals("doc") || strFileExt.equals("docx")
                         || strFileExt.equals("xls") || strFileExt.equals("xlsx") || strFileExt.equals("hwp") || strFileExt.equals("hwpx")
                         || strFileExt.equals("csv")) {
                     File fileDoc = new File(fileCPU.getAbsolutePath() + "/" + file.getOriginalFilename());
@@ -326,7 +327,7 @@ public class RestApiCtrl {
 
             strFileExt = strFileExt.toLowerCase();
 
-            if (strFileExt.equals("pdf") || strFileExt.equals("jpg") || strFileExt.equals("jpeg")
+            if (strFileExt.equals("ppt") || strFileExt.equals("pptx") || strFileExt.equals("pdf") || strFileExt.equals("jpg") || strFileExt.equals("jpeg")
                     || strFileExt.equals("tiff") || strFileExt.equals("png") || strFileExt.equals("tif")) {
                 File fileDoc = new File(fileGPU.getAbsolutePath() + "/" + _file.getOriginalFilename());
                 _file.transferTo(fileDoc);
@@ -344,7 +345,7 @@ public class RestApiCtrl {
                     return new ResponseEntity(objectMapper.writeValueAsString(structDocuseeRes), HttpStatus.OK);
                 }
 
-            } else if (strFileExt.equals("ppt") || strFileExt.equals("pptx") || strFileExt.equals("doc") || strFileExt.equals("docx")
+            } else if ( strFileExt.equals("doc") || strFileExt.equals("docx")
                     || strFileExt.equals("xls") || strFileExt.equals("xlsx") || strFileExt.equals("hwp") || strFileExt.equals("hwpx")
                     || strFileExt.equals("csv")) {
                 File fileDoc = new File(fileCPU.getAbsolutePath() + "/" + _file.getOriginalFilename());

@@ -454,7 +454,7 @@ public class DParser implements HealthIndicator {
                 return Health.down().withDetails(dictResult).build();
             }
         } catch (Exception e) {
-            return Health.down(e).withDetail("DParser", "UnAvailable").build();
+            return Health.down().withDetail("DParser", "UnAvailable").build();
         }
 
     }
