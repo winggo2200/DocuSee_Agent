@@ -37,9 +37,9 @@ public class Constants {
     public static final String PATH_RESULT = "./result/";
 
     public static void Initailization() {
-        SERVER_MAIN_HOST = System.getenv("SERVER_MAIN_HOST");
-        SERVER_ADDR_CPU = System.getenv("SERVER_ADDR_CPU") + "/api/v2/dparser";
-        SERVER_ADDR_GPU = System.getenv("SERVER_ADDR_GPU");
-        SERVER_ADDR_IMG = System.getenv("SERVER_ADDR_IMG");
+//        SERVER_MAIN_HOST = System.getenv("SERVER_MAIN_HOST");
+//        SERVER_ADDR_CPU = System.getenv("SERVER_ADDR_CPU") + "/api/v2/dparser";
+//        SERVER_ADDR_GPU = System.getenv("SERVER_ADDR_GPU");
+//        SERVER_ADDR_IMG = System.getenv("SERVER_ADDR_IMG");
     }
 }

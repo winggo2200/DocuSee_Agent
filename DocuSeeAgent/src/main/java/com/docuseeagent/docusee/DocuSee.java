@@ -110,6 +110,8 @@ public class DocuSee implements HealthIndicator {
 
                     //HashMap<String, String> dictResults = new HashMap<>();
 
+                    boolean bSuccess = false;
+
                     for (String strTask : dictFileTaskId.keySet()) {
                         try {
                             String strUrl = Constants.SERVER_ADDR_GPU + "/api/v1/images/get_task_results/" + strTask;
@@ -242,16 +244,18 @@ public class DocuSee implements HealthIndicator {
 
                                     dictStatusDocParse.put(strFileName, "success");
 
+                                    bSuccess = true;
+
                                     break;
                                 }else if(nodeParseResult.get("status").asText().equals("EXPIRED") || nodeParseResult.get("status").asText().equals("FAILURE")) {
                                     dictStatusDocParse.put(strFileName, nodeParseResult.get("status").asText());
 
-                                    ParserRes structParserRes = new ParserRes();
-                                    structParserRes.result = "failure";
-                                    structParserRes.id = _strUuid;
-                                    structParserRes.message = strFileName + " - parsing " + nodeParseResult.get("status").asText();
+//                                    ParserRes structParserRes = new ParserRes();
+//                                    structParserRes.result = "failure";
+//                                    structParserRes.id = _strUuid;
+//                                    structParserRes.message = strFileName + " - parsing " + nodeParseResult.get("status").asText();
 
-                                    log.info(objMapper.writeValueAsString(structParserRes));
+                                    log.info(objMapper.writeValueAsString(_strUuid + " - " + strFileName + " - parsing " + nodeParseResult.get("status").asText()));
 
                                     break;
                                 }else {
@@ -263,12 +267,12 @@ public class DocuSee implements HealthIndicator {
                                     if (elapsedTime > 3600000) {
                                         dictStatusDocParse.put(strFileName, nodeParseResult.get("status").asText());
 
-                                        ParserRes structParserRes = new ParserRes();
-                                        structParserRes.result = "failure";
-                                        structParserRes.id = _strUuid;
-                                        structParserRes.message = strFileName + " - parsing : timeout";
+//                                        ParserRes structParserRes = new ParserRes();
+//                                        structParserRes.result = "failure";
+//                                        structParserRes.id = _strUuid;
+//                                        structParserRes.message = strFileName + " - parsing : timeout";
 
-                                        log.info(objMapper.writeValueAsString(structParserRes));
+                                        log.info(objMapper.writeValueAsString(_strUuid + " - " + strFileName + " - parsing : timeout"));
 
                                         break;
                                     }
@@ -287,7 +291,9 @@ public class DocuSee implements HealthIndicator {
                     }
 
                     ParserRes structParserRes = new ParserRes();
-                    structParserRes.result = "success";
+
+                    if(bSuccess) structParserRes.result = "success";
+                    else structParserRes.result = "failure";
                     structParserRes.id = _strUuid;
                     structParserRes.message = objMapper.writeValueAsString(dictStatusDocParse);
 

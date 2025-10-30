@@ -191,6 +191,8 @@ public class DParser implements HealthIndicator {
 
             if (structDparserRes.result.equals("success")) {
                 try {
+                    boolean bSuccess = false;
+
                     JsonNode nodeData = objMapper.readTree(structDparserRes.message);
 
                     File[] fileDirs = fileDir.listFiles(File::isDirectory);
@@ -208,6 +210,8 @@ public class DParser implements HealthIndicator {
                                 String strFileName = astrFileName[0] + "." + astrFileName[1];
                                 dictStatusDocParse.put(strFileName, "success");
                                 lstDocFiles.add(strFileName);
+
+                                bSuccess = true;
                             }
                         }
                     }
@@ -217,6 +221,8 @@ public class DParser implements HealthIndicator {
                             String strFileName = fileData.get("filename").asText();
 
                             dictStatusDocParse.put(strFileName, "success");
+
+                            bSuccess = true;
 
                             boolean bEnable = false;
 
@@ -384,7 +390,9 @@ public class DParser implements HealthIndicator {
 //                    dictResult.put("status", objMapper.writeValueAsString(dictStatusDocParse));
 
                     ParserRes structParserRes = new ParserRes();
-                    structParserRes.result = "success";
+
+                    if (bSuccess) structParserRes.result = "success";
+                    else structParserRes.result = "failure";
                     structParserRes.id = _strUuid;
                     structParserRes.message = objMapper.writeValueAsString(dictStatusDocParse);
 

@@ -390,8 +390,12 @@ public class RestApiCtrl {
                 ParserRes structDparserRes = DParser.GetData(strUuid);
 
                 if (!structDparserRes.message.equals("Waiting state") && !structDparserRes.message.equals("Processing state") && !structDparserRes.message.equals("Uploading state")) {
+                    if(structDparserRes.result.equals("failure")){
+                        return new ResponseEntity(objectMapper.writeValueAsString(structDparserRes), HttpStatus.OK);
+                    }
                     break;
                 }
+
             }
 
             File fileDir = new File(new File(Constants.PATH_RESULT).getAbsolutePath() + "/" + strUuid + "/");
@@ -486,6 +490,14 @@ public class RestApiCtrl {
 
                             // 이전에 획득한 적이 있는 경우 기존에 파일이 있는지 확인하여 처리
 
+                            if (!fileDir.exists()) {
+                                structParserRes.result = "failure";
+                                structParserRes.message = "Failed to parse file.";
+
+                                log.error(objectMapper.writeValueAsString(structParserRes));
+                                return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
+                            }
+
                             File[] fileDirs = fileDir.listFiles(File::isDirectory);
 
                             if (fileDirs.length > 0) {
@@ -527,7 +539,7 @@ public class RestApiCtrl {
             }
         }
         structParserRes.result = "failure";
-        structParserRes.message = "No processed data found.";
+        structParserRes.message = "Not found parsing data.";
 
         try {
             log.error(objectMapper.writeValueAsString(structParserRes));

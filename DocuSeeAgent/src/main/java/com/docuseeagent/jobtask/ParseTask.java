@@ -82,7 +82,7 @@ public class ParseTask implements Runnable {
                                     m_redisService.DeleteValue(strUuid);
                                     m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
 
-
+                                    return;
                                 }
 
 
@@ -101,6 +101,8 @@ public class ParseTask implements Runnable {
                                     m_redisService.RemoveListValue(Constants.REDIS_KEY_PROC, strUuid);
                                     m_redisService.DeleteValue(strUuid);
                                     m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
+
+                                    return;
                                 }
 
                                 log.info(objectMapper.writeValueAsString(structDocuseeRes) );
