@@ -340,7 +340,7 @@ public class RestApiCtrl {
                     String strLog = "File parse failed. - " + strFileName;
 
                     structDocuseeRes.message = strLog;
-                    log.warn(objectMapper.writeValueAsString(structDocuseeRes));
+                    log.info(objectMapper.writeValueAsString(structDocuseeRes));
 
                     return new ResponseEntity(objectMapper.writeValueAsString(structDocuseeRes), HttpStatus.OK);
                 }
@@ -374,6 +374,19 @@ public class RestApiCtrl {
 
                     return new ResponseEntity(objectMapper.writeValueAsString(structDparserRes), HttpStatus.OK);
                 }
+
+                while (true) {
+                    Thread.sleep(1000);
+                    structDparserRes = DParser.GetData(strUuid);
+
+                    if (!structDparserRes.message.equals("Waiting state") && !structDparserRes.message.equals("Processing state") && !structDparserRes.message.equals("Uploading state")) {
+                        if(structDparserRes.result.equals("failure")){
+                            return new ResponseEntity(objectMapper.writeValueAsString(structDparserRes), HttpStatus.OK);
+                        }
+                        break;
+                    }
+                }
+
             } else {
                 ParserRes structParserRes = new ParserRes();
                 structParserRes.result = "failure";
@@ -385,18 +398,6 @@ public class RestApiCtrl {
                 return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
             }
 
-            while (true) {
-                Thread.sleep(1000);
-                ParserRes structDparserRes = DParser.GetData(strUuid);
-
-                if (!structDparserRes.message.equals("Waiting state") && !structDparserRes.message.equals("Processing state") && !structDparserRes.message.equals("Uploading state")) {
-                    if(structDparserRes.result.equals("failure")){
-                        return new ResponseEntity(objectMapper.writeValueAsString(structDparserRes), HttpStatus.OK);
-                    }
-                    break;
-                }
-
-            }
 
             File fileDir = new File(new File(Constants.PATH_RESULT).getAbsolutePath() + "/" + strUuid + "/");
 

@@ -154,26 +154,12 @@ public class DocuSee implements HealthIndicator {
                                     List<Object> lstResults = new ArrayList<>();
                                     List<Object> lstDocImg = new ArrayList<>();
 
+                                    List<Object> lstResourceImgs = new ArrayList<>();
+
                                     for (JsonNode nodePage : nodePages) {
                                         String strPageNum = nodePage.get("page").asText();
-                                        //String strPageNum = nodePage.get("page").asText();
 
-
-
-
-                                        //String strPageJson = nodePage.get("json_data").asText();
-
-
-                                        //String strPageJson = nodePage.get("result").asText();
                                         JsonNode nodePagesData = nodePage.get("result");
-                                        String strPageJson = nodePagesData.asText();
-
-                                        FileOutputStream fos1 = new FileOutputStream(strJsonPath + "/" + strPageNum + ".json");
-                                        fos1.write(strPageJson.getBytes());
-                                        fos1.close();
-
-                                        //JsonNode nodePagesData = objMapper.readTree(strPageJson);
-
 
                                         HashMap<String, Object> dictDocData = new HashMap<>();
 
@@ -186,6 +172,7 @@ public class DocuSee implements HealthIndicator {
                                         dictAnalyData.put("paragraphs", nodePagesData.get("paragraphs"));
                                         //dictAnalyData.put("lines", nodePagesData.get("lines"));
                                         dictAnalyData.put("charts", nodePagesData.get("charts"));
+                                        dictAnalyData.put("diagrams", nodePagesData.get("diagrams"));
 
                                         //HashMap<String, Object> dictTable = new HashMap<>();
                                         List<Object> lstTables = new ArrayList<>();
@@ -209,10 +196,10 @@ public class DocuSee implements HealthIndicator {
 
                                         String strDocFileName = URLEncoder.encode(dictFileTaskId.get(strTask), StandardCharsets.UTF_8);
 
-                                        String strImgAddr = Constants.SERVER_MAIN_HOST + "/api/v2/agent/img/get/doc?uuid=" + _strUuid + "&file=" + strDocFileName + "&page=" + strPageNum;
+                                        String strDocImgAddr = Constants.SERVER_MAIN_HOST + "/api/v2/agent/img/get/doc?uuid=" + _strUuid + "&file=" + strDocFileName + "&page=" + strPageNum;
 
                                         HashMap<String, String> dictDocImg = new HashMap<>();
-                                        dictDocImg.put("src", strImgAddr);
+                                        dictDocImg.put("src", strDocImgAddr);
                                         dictDocImg.put("alt", "페이지" + strPageNum);
 
                                         lstDocImg.add(dictDocImg);
@@ -229,6 +216,24 @@ public class DocuSee implements HealthIndicator {
                                         FileOutputStream fos2 = new FileOutputStream(strImgPath + "/" + strPageNum + ".jpg");
                                         fos2.write(byPageImg);
                                         fos2.close();
+
+
+                                        for(JsonNode nodeResource : nodePagesData.get("image_urls")){
+                                            byPageImg = webclientForImg.get().uri(nodeResource.get("src").asText()).accept(MediaType.MULTIPART_FORM_DATA).retrieve().bodyToMono(byte[].class).block();
+
+                                            FileOutputStream fosImg = new FileOutputStream(strJsonPath + "/" + nodeResource.get("key").asText());
+                                            fosImg.write(byPageImg);
+                                            fosImg.close();
+
+                                            // strDocFileName - Encoded
+                                            String strResourceUrl = Constants.SERVER_MAIN_HOST + "/api/v2/agent/img/get/resource?uuid=" + _strUuid + "&file=" + strDocFileName + "&filename=" + nodeResource.get("key").asText();
+
+                                            HashMap<String, String> dictResourceImg = new HashMap<>();
+                                            dictResourceImg.put("src", strResourceUrl);
+                                            dictResourceImg.put("key", nodeResource.get("key").asText());
+
+                                            lstResourceImgs.add(dictResourceImg);
+                                        }
                                     }
 
                                     HashMap<String, Object> dictResultDoc = new HashMap<>();
@@ -236,6 +241,7 @@ public class DocuSee implements HealthIndicator {
                                     dictResultDoc.put("filename", dictFileTaskId.get(strTask));
                                     dictResultDoc.put("pages", lstResults);
                                     dictResultDoc.put("page_image_urls", lstDocImg);
+                                    dictResultDoc.put("image_urls", lstResourceImgs);
 
                                     FileOutputStream fosFileData = new FileOutputStream(strJsonPath + "/result.json");
                                     String strFileData = objMapper.writeValueAsString(dictResultDoc);
@@ -246,6 +252,8 @@ public class DocuSee implements HealthIndicator {
 
                                     bSuccess = true;
 
+                                    log.info(_strUuid + " - " + strFileName + " - parsing " + nodeParseResult.get("status").asText());
+
                                     break;
                                 }else if(nodeParseResult.get("status").asText().equals("EXPIRED") || nodeParseResult.get("status").asText().equals("FAILURE")) {
                                     dictStatusDocParse.put(strFileName, nodeParseResult.get("status").asText());
@@ -255,7 +263,7 @@ public class DocuSee implements HealthIndicator {
 //                                    structParserRes.id = _strUuid;
 //                                    structParserRes.message = strFileName + " - parsing " + nodeParseResult.get("status").asText();
 
-                                    log.info(objMapper.writeValueAsString(_strUuid + " - " + strFileName + " - parsing " + nodeParseResult.get("status").asText()));
+                                    log.info(_strUuid + " - " + strFileName + " - parsing " + nodeParseResult.get("status").asText() + " - " + nodeParseResult.get("message"));
 
                                     break;
                                 }else {

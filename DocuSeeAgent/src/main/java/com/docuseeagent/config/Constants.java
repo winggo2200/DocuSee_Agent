@@ -22,24 +22,29 @@ public class Constants {
     // 파일 보관 제한 시간
     public static final int TIMEOUT_HOUR_DOC = 3;
 
-
-    //public static String SERVER_TYPE = System.getenv("SERVER_TYPE");
-
-    public static String SERVER_ADDR_GPU = "http://218.145.184.155:33002";
-    //public static String SERVER_ADDR_GPU = "http://docusee.iptime.org:33020";
+    public static String SERVER_ADDR_GPU = "";
     public static String SERVER_MAIN_HOST = "";
-    public static String SERVER_ADDR_CPU = "http://localhost:8081/api/v2/dparser"; // Default value for local testing
-    //public static String SERVER_DOC_IMG = (SERVER_AGENT + "/api/v2/agent/img/get/doc?");
-    public static String SERVER_ADDR_IMG = "http://218.145.184.155:9000";
+    public static String SERVER_ADDR_CPU = ""; // Default value for local testing
+    public static String SERVER_ADDR_IMG = "";
     public static String SERVER_API_KEY = "";
 
     public static final String PATH_DOC = "./doc/";
     public static final String PATH_RESULT = "./result/";
 
     public static void Initailization() {
-//        SERVER_MAIN_HOST = System.getenv("SERVER_MAIN_HOST");
-//        SERVER_ADDR_CPU = System.getenv("SERVER_ADDR_CPU") + "/api/v2/dparser";
-//        SERVER_ADDR_GPU = System.getenv("SERVER_ADDR_GPU");
-//        SERVER_ADDR_IMG = System.getenv("SERVER_ADDR_IMG");
+        SERVER_MAIN_HOST = System.getenv("SERVER_MAIN_HOST");
+        SERVER_ADDR_CPU = System.getenv("SERVER_ADDR_CPU");
+        SERVER_ADDR_GPU = System.getenv("SERVER_ADDR_GPU");
+        SERVER_ADDR_IMG = System.getenv("SERVER_ADDR_IMG");
+
+        // Default
+        if(SERVER_MAIN_HOST == null) SERVER_MAIN_HOST = "http://localhost:8080";
+
+        if(SERVER_ADDR_CPU == null) SERVER_ADDR_CPU = "http://localhost:8081/api/v2/dparser";
+        else SERVER_ADDR_CPU += "/api/v2/dparser";
+
+        if(SERVER_ADDR_GPU == null) SERVER_ADDR_GPU = "http://218.145.184.155:33002";
+
+        if(SERVER_ADDR_IMG == null) SERVER_ADDR_IMG = "http://218.145.184.155:9000";
     }
 }
