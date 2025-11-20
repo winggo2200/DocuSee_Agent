@@ -173,6 +173,7 @@ public class DocuSee implements HealthIndicator {
                                         //dictAnalyData.put("lines", nodePagesData.get("lines"));
                                         dictAnalyData.put("charts", nodePagesData.get("charts"));
                                         dictAnalyData.put("diagrams", nodePagesData.get("diagrams"));
+                                        dictAnalyData.put("complexity", nodePagesData.get("complexity"));
 
                                         //HashMap<String, Object> dictTable = new HashMap<>();
                                         List<Object> lstTables = new ArrayList<>();

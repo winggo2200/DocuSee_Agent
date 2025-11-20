@@ -1,7 +1,7 @@
 <configuration>
     <property resource="logback-variables.properties" />
 
-    <timestamp key="TODAY" datePattern="yyyyMMdd" />
+<!--    <timestamp key="TODAY" datePattern="yyyyMMdd" />-->
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <layout class="ch.qos.logback.classic.PatternLayout">
@@ -17,11 +17,12 @@
             <onMatch>ACCEPT</onMatch>
             <onMismatch>DENY</onMismatch>
         </filter>
-        <file>${LOG_PATH}/info/${TODAY}_${LOG_FILE_NAME}_info.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/info/%d{yyyyMMdd}_${LOG_FILE_NAME}_info_%i.log</fileNamePattern>
-            <maxFileSize>100MB</maxFileSize>
-            <maxHistory>1000</maxHistory>
+        <file>${LOG_PATH}/info/${LOG_FILE_NAME}_info.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+<!--            <fileNamePattern>${LOG_PATH}/info/%d{yyyyMMdd}_${LOG_FILE_NAME}_info_%i.log</fileNamePattern>-->
+<!--            <maxFileSize>100MB</maxFileSize>-->
+            <fileNamePattern>${LOG_PATH}/info/%d{yyyyMMdd}_${LOG_FILE_NAME}_info.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
         </rollingPolicy>
         <encoder>
             <pattern>${LOG_PATTERN}</pattern>
@@ -46,16 +47,17 @@
     <!--    </appender>-->
 
     <appender name="LOG-ERROR" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_PATH}/err/${TODAY}_${LOG_FILE_NAME}_err.log</file>
+        <file>${LOG_PATH}/err/${LOG_FILE_NAME}_err.log</file>
         <filter class = "ch.qos.logback.classic.filter.LevelFilter">
             <level>ERROR</level>
             <onMatch>ACCEPT</onMatch>
             <onMismatch>DENY</onMismatch>
         </filter>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">-
-            <fileNamePattern>${LOG_PATH}/err/%d{yyyyMMdd}_${LOG_FILE_NAME}_err_%i.log</fileNamePattern>
-            <maxFileSize>100MB</maxFileSize>
-            <maxHistory>1000</maxHistory>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">-
+<!--            <fileNamePattern>${LOG_PATH}/err/%d{yyyyMMdd}_${LOG_FILE_NAME}_err_%i.log</fileNamePattern>-->
+<!--            <maxFileSize>100MB</maxFileSize>-->
+            <fileNamePattern>${LOG_PATH}/info/%d{yyyyMMdd}_${LOG_FILE_NAME}_err.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
         </rollingPolicy>
         <encoder>
             <pattern>${LOG_PATTERN}</pattern>
