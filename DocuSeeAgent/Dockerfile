@@ -1,6 +1,6 @@
 FROM bitnami/java:21.0.7-9
 WORKDIR /app
-COPY ./target/DocuSeeAgent-2.2.1.jar DocuSeeAgent-2.2.1.jar
+COPY ./target/DocuSeeAgent-2.3.0.jar DocuSeeAgent-2.3.0.jar
 ARG SERVER_TYPE
 ENV SERVER_TYPE=$SERVER_TYPE
 ARG SERVER_MAIN_HOST
@@ -12,4 +12,4 @@ ENV SERVER_ADDR_GPU=$SERVER_ADDR_GPU
 ARG SERVER_ADDR_IMG
 ENV SERVER_ADDR_IMG=$SERVER_ADDR_IMG
 ENV TZ=Asia/Seoul
-CMD ["java", "-jar", "DocuSeeAgent-2.2.1.jar"]
+CMD ["java", "-jar", "DocuSeeAgent-2.3.0.jar"]
