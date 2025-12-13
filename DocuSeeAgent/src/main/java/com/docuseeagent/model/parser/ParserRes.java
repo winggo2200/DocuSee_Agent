@@ -8,7 +8,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 public class ParserRes {
-    public String result;
+    public String status;
     public String id;
     public String message;
 }

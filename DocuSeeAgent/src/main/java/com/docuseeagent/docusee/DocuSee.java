@@ -27,6 +27,8 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
 import java.io.File;
@@ -73,15 +75,28 @@ public class DocuSee implements HealthIndicator {
 //                        String strRes = webClient.post().uri(strUploadProcUrl)
 //                                .body(BodyInserters.fromMultipartData(multipartBodyBuilderForGPU.build())).retrieve().bodyToMono(String.class).block();
 
-                        String strRes = webClient.post().uri(strUploadProcUrl)
-                                .body(BodyInserters.fromMultipartData(multipartBodyBuilderForGPU.build())).retrieve().bodyToMono(String.class).block();
+                        try {
+                            String strRes = webClient.post().uri(strUploadProcUrl)
+                                    .body(BodyInserters.fromMultipartData(multipartBodyBuilderForGPU.build())).retrieve().bodyToMono(String.class).block();
 
+                            JsonNode nodeResult = objMapper.readTree(strRes);
 
-                        JsonNode nodeResult = objMapper.readTree(strRes);
+                            String strTaskId = nodeResult.get("task_id").asText();
 
-                        String strTaskId = nodeResult.get("task_id").asText();
+                            dictFileTaskId.put(strTaskId, file.getName());
 
-                        dictFileTaskId.put(strTaskId, file.getName());
+                        } catch (Exception e) {
+
+                            ParserRes structParserRes = new ParserRes();
+                            structParserRes.status = "failure";
+                            structParserRes.id = _strUuid;
+                            structParserRes.message = e.getMessage();
+
+                            log.info(objMapper.writeValueAsString(structParserRes));
+
+                            return structParserRes;
+
+                        }
                     }
 
                     if(_redisService != null) {
@@ -98,7 +113,7 @@ public class DocuSee implements HealthIndicator {
                             _redisService.DeleteValue(_strUuid);
 
                             ParserRes structParserRes = new ParserRes();
-                            structParserRes.result = "failure";
+                            structParserRes.status = "failure";
                             structParserRes.id = _strUuid;
                             structParserRes.message = e.getMessage();
 
@@ -289,7 +304,7 @@ public class DocuSee implements HealthIndicator {
                             }
                         } catch (Exception e) {
                             ParserRes structParserRes = new ParserRes();
-                            structParserRes.result = "failure";
+                            structParserRes.status = "failure";
                             structParserRes.id = _strUuid;
                             structParserRes.message = e.getMessage();
 
@@ -301,8 +316,8 @@ public class DocuSee implements HealthIndicator {
 
                     ParserRes structParserRes = new ParserRes();
 
-                    if(bSuccess) structParserRes.result = "success";
-                    else structParserRes.result = "failure";
+                    if(bSuccess) structParserRes.status = "success";
+                    else structParserRes.status = "failure";
                     structParserRes.id = _strUuid;
                     structParserRes.message = objMapper.writeValueAsString(dictStatusDocParse);
 
@@ -313,7 +328,7 @@ public class DocuSee implements HealthIndicator {
             }
         } catch (Exception e) {
             ParserRes structParserRes = new ParserRes();
-            structParserRes.result = "failure";
+            structParserRes.status = "failure";
             structParserRes.id = _strUuid;
             structParserRes.message = e.getMessage();
 
@@ -327,7 +342,7 @@ public class DocuSee implements HealthIndicator {
         }
 
         ParserRes structParserRes = new ParserRes();
-        structParserRes.result = "failure";
+        structParserRes.status = "failure";
         structParserRes.id = _strUuid;
         structParserRes.message = "Not found files to parse";
 

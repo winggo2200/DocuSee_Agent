@@ -54,7 +54,7 @@ public class ParseTask implements Runnable {
                             if (fileList.length > 0) {
                                 ParserRes structDparserRes = DParser.Upload(strUuid);
 
-                                if (!structDparserRes.result.equals("success")) {
+                                if (!structDparserRes.status.equals("success")) {
                                     m_redisService.RemoveListValue(Constants.REDIS_KEY_PROC, strUuid);
                                     m_redisService.DeleteValue(strUuid);
                                     m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
@@ -62,7 +62,7 @@ public class ParseTask implements Runnable {
 
                                 structDparserRes = DParser.Parse(strUuid);
 
-                                if (!structDparserRes.result.equals("success")) {
+                                if (!structDparserRes.status.equals("success")) {
                                     m_redisService.RemoveListValue(Constants.REDIS_KEY_PROC, strUuid);
                                     m_redisService.DeleteValue(strUuid);
                                     m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
@@ -77,7 +77,7 @@ public class ParseTask implements Runnable {
                                     }
                                 }
 
-                                if (!structDparserRes.result.equals("success")) {
+                                if (!structDparserRes.status.equals("success")) {
                                     m_redisService.RemoveListValue(Constants.REDIS_KEY_PROC, strUuid);
                                     m_redisService.DeleteValue(strUuid);
                                     m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
@@ -97,7 +97,7 @@ public class ParseTask implements Runnable {
                             if (fileList.length > 0) {
                                 ParserRes structDocuseeRes = DocuSee.Parse(strUuid, m_redisService);
 
-                                if (!structDocuseeRes.result.equals("success")) {
+                                if (!structDocuseeRes.status.equals("success")) {
                                     m_redisService.RemoveListValue(Constants.REDIS_KEY_PROC, strUuid);
                                     m_redisService.DeleteValue(strUuid);
                                     m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);

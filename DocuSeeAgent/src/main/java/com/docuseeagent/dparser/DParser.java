@@ -60,22 +60,20 @@ public class DParser implements HealthIndicator {
                     builder.part("srcfile", resourceFile);
                     builder.part("add", true);
 
-                    String strResult = webClient.post().uri(strDparserAddr).body(BodyInserters.fromMultipartData(builder.build())).retrieve().bodyToMono(String.class).block();
-
                     ParserRes structDparserRes;
-
-
                     try {
+                        String strResult = webClient.post().uri(strDparserAddr).body(BodyInserters.fromMultipartData(builder.build())).retrieve().bodyToMono(String.class).block();
+
                         structDparserRes = objMapper.readValue(strResult, ParserRes.class);
                     } catch (Exception e) {
-                        structDparserResResult.result = "failure";
+                        structDparserResResult.status = "failure";
 
                         structDparserResResult.message = e.getMessage();
 
                         return structDparserResResult;
                     }
 
-                    if (!structDparserRes.result.equals("success")) {
+                    if (!structDparserRes.status.equals("success")) {
                         try {
                             log.error(objMapper.writeValueAsString(structDparserRes));
                         } catch (JsonProcessingException e) {
@@ -85,7 +83,7 @@ public class DParser implements HealthIndicator {
                     }
                 }
             } else {
-                structDparserResResult.result = "failure";
+                structDparserResResult.status = "failure";
                 structDparserResResult.message = "No files to upload.";
 
                 try {
@@ -98,7 +96,7 @@ public class DParser implements HealthIndicator {
             }
         }
 
-        structDparserResResult.result = "success";
+        structDparserResResult.status = "success";
         structDparserResResult.message = "Upload success.";
 
         try {
@@ -106,7 +104,6 @@ public class DParser implements HealthIndicator {
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
-
 
         return structDparserResResult;
 
@@ -122,9 +119,29 @@ public class DParser implements HealthIndicator {
         LinkedMultiValueMap mapBody = new LinkedMultiValueMap();
         mapBody.add("uuid", _strUuid);
 
-        String strResult = webClient.post().uri(strDparserAddr).body(BodyInserters.fromFormData(mapBody)).retrieve().bodyToMono(String.class).block();
-
         ObjectMapper objMapper = new ObjectMapper();
+
+        String strResult = "";
+
+        try {
+            strResult = webClient.post().uri(strDparserAddr).body(BodyInserters.fromFormData(mapBody)).retrieve().bodyToMono(String.class).block();
+        } catch (Exception e) {
+            ParserRes structDparserResResult = new ParserRes();
+
+            structDparserResResult.id = _strUuid;
+            structDparserResResult.status = "failure";
+            structDparserResResult.message = "Failed to get json data.";
+
+            try {
+                log.info(objMapper.writeValueAsString(structDparserResResult));
+            } catch (JsonProcessingException ex) {
+                throw new RuntimeException(ex);
+            }
+
+            return structDparserResResult;
+
+        }
+
         ParserRes structDparserRes;
         try {
             structDparserRes = objMapper.readValue(strResult, ParserRes.class);
@@ -132,8 +149,8 @@ public class DParser implements HealthIndicator {
             ParserRes structDparserResResult = new ParserRes();
 
             structDparserResResult.id = _strUuid;
-            structDparserResResult.result = "failure";
-            structDparserResResult.message = e.getMessage();
+            structDparserResResult.status = "failure";
+            structDparserResResult.message = "Failed to read json file.";
 
             try {
                 log.info(objMapper.writeValueAsString(structDparserResResult));
@@ -155,7 +172,6 @@ public class DParser implements HealthIndicator {
 
     public static ParserRes GetData(String _strUuid) {
         ObjectMapper objMapper = new ObjectMapper();
-
 
         File fileDoc = new File(new File(Constants.PATH_DOC).getAbsolutePath() + "/" + _strUuid + "/CPU");
 
@@ -179,17 +195,14 @@ public class DParser implements HealthIndicator {
 
         StringBuilder sbResult = new StringBuilder();
 
-        String strResult = webClient.post().uri(strDparserAddr).body(BodyInserters.fromFormData(mapBody)).retrieve().bodyToMono(String.class).onErrorResume(
-                WebClientResponseException.class, ex -> {
-                    if (ex.getStatusCode() == HttpStatus.BAD_REQUEST) sbResult.append(ex.getResponseBodyAsString());
-                    return Mono.just(sbResult.toString());
-                }
-        ).block();
+
 
         try {
+            String strResult = webClient.post().uri(strDparserAddr).body(BodyInserters.fromFormData(mapBody)).retrieve().bodyToMono(String.class).block();
+
             ParserRes structDparserRes = objMapper.readValue(strResult, ParserRes.class);
 
-            if (structDparserRes.result.equals("success")) {
+            if (structDparserRes.status.equals("success")) {
                 try {
                     boolean bSuccess = false;
 
@@ -267,7 +280,7 @@ public class DParser implements HealthIndicator {
 
                             JsonNode nodeResourceImgs = objMapper.readTree(strResult);
 
-                            if (nodeResourceImgs.get("result").asText().equals("success")) {
+                            if (nodeResourceImgs.get("status").asText().equals("success")) {
                                 JsonNode nodeListImg = objMapper.readTree(nodeResourceImgs.get("message").asText());
 
                                 for (JsonNode nodeResoureImg : nodeListImg) {
@@ -296,54 +309,54 @@ public class DParser implements HealthIndicator {
 
                             JsonNode nodeDocumentImgs = objMapper.readTree(strResult);
 
-                            if (nodeDocumentImgs.get("result").asText().equals("success")) {
+                            if (nodeDocumentImgs.get("status").asText().equals("success")) {
                                 JsonNode nodeListImg = objMapper.readTree(nodeDocumentImgs.get("message").asText());
 
                                 String strDocImg = nodeListImg.get(0).asText();
 
-                                if (strDocImg.contains("_")) {
-                                    HashMap<Integer, List<String>> hashMap = new HashMap<>();
-                                    for (JsonNode nodeDocImg : nodeListImg) {
-                                        String[] astrDocImg = nodeDocImg.asText().split("_");
-
-                                        if (hashMap.containsKey(Integer.valueOf(astrDocImg[0]))) {
-                                            hashMap.get(Integer.valueOf(astrDocImg[0])).add(astrDocImg[1]);
-                                        } else {
-                                            List<String> lstPage = new ArrayList<>();
-                                            lstPage.add(astrDocImg[1]);
-                                            hashMap.put(Integer.valueOf(astrDocImg[0]), lstPage);
-                                        }
-                                    }
-
-                                    int countPage = 0;
-                                    for (int i = 1; i <= hashMap.size(); i++) {
-                                        List<String> lstPage = hashMap.get(i);
-
-                                        if (lstPage != null) {
-                                            for (String strPage : lstPage) {
-                                                String strResourceImg = i + "_" + strPage;
-                                                String strResourceImgAddr = Constants.SERVER_ADDR_CPU + "/img/get/doc";
-
-                                                mapBody.clear();
-                                                mapBody.add("uuid", _strUuid);
-                                                mapBody.add("file", strFileName);
-                                                mapBody.add("filename", strResourceImg);
-
-                                                byte[] byResourceImg;
-                                                byResourceImg = webClient.post().uri(strResourceImgAddr).body(BodyInserters.fromFormData(mapBody)).accept(MediaType.MULTIPART_FORM_DATA).retrieve().bodyToMono(byte[].class).block();
-
-                                                if (byResourceImg != null) {
-                                                    int nName = countPage + Integer.valueOf(strPage);
-                                                    FileOutputStream fosImgData = new FileOutputStream(strImgPath + "/" + nName + ".jpg");
-                                                    fosImgData.write(byResourceImg);
-                                                    fosImgData.close();
-                                                }
-                                            }
-
-                                            countPage += lstPage.size();
-                                        }
-                                    }
-                                } else {
+//                                if (strDocImg.contains("_")) {
+//                                    HashMap<Integer, List<String>> hashMap = new HashMap<>();
+//                                    for (JsonNode nodeDocImg : nodeListImg) {
+//                                        String[] astrDocImg = nodeDocImg.asText().split("_");
+//
+//                                        if (hashMap.containsKey(Integer.valueOf(astrDocImg[0]))) {
+//                                            hashMap.get(Integer.valueOf(astrDocImg[0])).add(astrDocImg[1]);
+//                                        } else {
+//                                            List<String> lstPage = new ArrayList<>();
+//                                            lstPage.add(astrDocImg[1]);
+//                                            hashMap.put(Integer.valueOf(astrDocImg[0]), lstPage);
+//                                        }
+//                                    }
+//
+//                                    int countPage = 0;
+//                                    for (int i = 1; i <= hashMap.size(); i++) {
+//                                        List<String> lstPage = hashMap.get(i);
+//
+//                                        if (lstPage != null) {
+//                                            for (String strPage : lstPage) {
+//                                                String strResourceImg = i + "_" + strPage;
+//                                                String strResourceImgAddr = Constants.SERVER_ADDR_CPU + "/img/get/doc";
+//
+//                                                mapBody.clear();
+//                                                mapBody.add("uuid", _strUuid);
+//                                                mapBody.add("file", strFileName);
+//                                                mapBody.add("filename", strResourceImg);
+//
+//                                                byte[] byResourceImg;
+//                                                byResourceImg = webClient.post().uri(strResourceImgAddr).body(BodyInserters.fromFormData(mapBody)).accept(MediaType.MULTIPART_FORM_DATA).retrieve().bodyToMono(byte[].class).block();
+//
+//                                                if (byResourceImg != null) {
+//                                                    int nName = countPage + Integer.valueOf(strPage);
+//                                                    FileOutputStream fosImgData = new FileOutputStream(strImgPath + "/" + nName + ".jpg");
+//                                                    fosImgData.write(byResourceImg);
+//                                                    fosImgData.close();
+//                                                }
+//                                            }
+//
+//                                            countPage += lstPage.size();
+//                                        }
+//                                    }
+//                                } else {
                                     for (JsonNode nodeDocImg : nodeListImg) {
                                         String strResourceImg = nodeDocImg.asText();
                                         String strResourceImgAddr = Constants.SERVER_ADDR_CPU + "/img/get/doc";
@@ -361,7 +374,7 @@ public class DParser implements HealthIndicator {
                                             fosImgData.write(byResourceImg);
                                             fosImgData.close();
                                         }
-                                    }
+                                    //}
                                 }
                             }
 
@@ -391,8 +404,8 @@ public class DParser implements HealthIndicator {
 
                     ParserRes structParserRes = new ParserRes();
 
-                    if (bSuccess) structParserRes.result = "success";
-                    else structParserRes.result = "failure";
+                    if (bSuccess) structParserRes.status = "success";
+                    else structParserRes.status = "failure";
                     structParserRes.id = _strUuid;
                     structParserRes.message = objMapper.writeValueAsString(dictStatusDocParse);
 
@@ -408,7 +421,7 @@ public class DParser implements HealthIndicator {
 
                 } catch (Exception e) {
                     ParserRes structParserRes = new ParserRes();
-                    structParserRes.result = "failure";
+                    structParserRes.status = "failure";
                     structParserRes.id = _strUuid;
                     structParserRes.message = e.getMessage();
 
@@ -418,16 +431,17 @@ public class DParser implements HealthIndicator {
                 }
             } else {
                 ParserRes structParserRes = new ParserRes();
-                structParserRes.result = "failure";
+                structParserRes.status = "failure";
                 structParserRes.id = _strUuid;
                 structParserRes.message = structDparserRes.message;
                 return structParserRes;
             }
         } catch (Exception e) {
             ParserRes structDparserResResult = new ParserRes();
-            structDparserResResult.result = "failure";
+            structDparserResResult.status = "failure";
             structDparserResResult.id = _strUuid;
-            structDparserResResult.message = e.getMessage();
+            structDparserResResult.message = "Fail to get parsing data.";
+            //structDparserResResult.message = e.getMessage();
 
             try {
                 log.error(objMapper.writeValueAsString(structDparserResResult));
@@ -458,7 +472,7 @@ public class DParser implements HealthIndicator {
 
             if (nodeResult.get("status").asText().equals("UP")) {
                 return Health.up().withDetails(dictResult).build();
-            }else{
+            } else {
                 return Health.down().withDetails(dictResult).build();
             }
         } catch (Exception e) {

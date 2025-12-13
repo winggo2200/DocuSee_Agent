@@ -43,8 +43,8 @@ public class Constants {
         if(SERVER_ADDR_CPU == null) SERVER_ADDR_CPU = "http://localhost:8081/api/v2/dparser";
         else SERVER_ADDR_CPU += "/api/v2/dparser";
 
-        if(SERVER_ADDR_GPU == null) SERVER_ADDR_GPU = "http://218.145.184.155:33002";
+        if(SERVER_ADDR_GPU == null) SERVER_ADDR_GPU = "http://localhost:33002";
 
-        if(SERVER_ADDR_IMG == null) SERVER_ADDR_IMG = "http://218.145.184.155:9000";
+        if(SERVER_ADDR_IMG == null) SERVER_ADDR_IMG = "http://localhost:9000";
     }
 }
