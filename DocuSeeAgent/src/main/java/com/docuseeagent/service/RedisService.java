@@ -2,6 +2,8 @@ package com.docuseeagent.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -15,7 +17,7 @@ public class RedisService {
     private final ObjectMapper m_objectMapper;
 
     public String GetValue(String _strKey){
-        Object obj = m_redisConfig.opsForValue().get(_strKey);;
+        Object obj = m_redisConfig.opsForValue().get(_strKey);
 
         if(obj == null)
             return null;
@@ -95,7 +97,12 @@ public class RedisService {
         return m_redisConfig.opsForList().getOperations().delete(_strKey);
     }
 
-
+    public void FlushAll() {
+        m_redisConfig.execute((RedisConnection connection) -> {
+            connection.flushAll();
+            return null;
+        });
+    }
 
 //    private final ReactiveRedisOperations<String, Object> redisOps;
 //    //private final ReactiveListOperations<String, Object> listOps;

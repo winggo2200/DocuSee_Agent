@@ -52,44 +52,46 @@ public class RestApiCtrl {
         //m_redisService.DeleteList(Constants.REDIS_KEY_COMPLETED);
 
         log.info("init");
-        String strProcUuid = m_redisService.RightPopValue(Constants.REDIS_KEY_PROC, String.class);
+        m_redisService.FlushAll();
 
-        ObjectMapper mapper = new ObjectMapper();
-
-        while (strProcUuid != null && !strProcUuid.isEmpty()) {
-            try {
-                String strDataInfo = m_redisService.GetValue(strProcUuid);
-                RedisDataInfo redisDataInfo = mapper.convertValue(strDataInfo, RedisDataInfo.class);
-
-                redisDataInfo.status = Constants.REDIS_STATUS_WAIT;
-                redisDataInfo.date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-
-                m_redisService.SetValue(strProcUuid, mapper.writeValueAsString(redisDataInfo));
-
-                m_redisService.LeftPushValue(Constants.REDIS_KEY_WAIT, strProcUuid);
-
-                File fileDocSrc = new File(new File(Constants.PATH_RESULT).getAbsolutePath() + "/" + strProcUuid);
-
-                if (fileDocSrc.exists())
-                    FileUtils.deleteDirectory(fileDocSrc);
-
-                strProcUuid = m_redisService.RightPopValue(Constants.REDIS_KEY_PROC, String.class);
-            } catch (Exception e) {
-                ParserRes structParserRes = new ParserRes();
-
-                structParserRes.status = "failure";
-                structParserRes.id = "";
-                structParserRes.message = "Initailization error.";
-
-                try {
-                    log.info(objectMapper.writeValueAsString(structParserRes) );
-                } catch (JsonProcessingException ex) {
-                    log.error(ex.getMessage());
-                    throw new RuntimeException(ex);
-                }
-                return;
-            }
-        }
+//        String strProcUuid = m_redisService.RightPopValue(Constants.REDIS_KEY_PROC, String.class);
+//
+//        ObjectMapper mapper = new ObjectMapper();
+//
+//        while (strProcUuid != null && !strProcUuid.isEmpty()) {
+//            try {
+//                String strDataInfo = m_redisService.GetValue(strProcUuid);
+//                RedisDataInfo redisDataInfo = mapper.convertValue(strDataInfo, RedisDataInfo.class);
+//
+//                redisDataInfo.status = Constants.REDIS_STATUS_WAIT;
+//                redisDataInfo.date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+//
+//                m_redisService.SetValue(strProcUuid, mapper.writeValueAsString(redisDataInfo));
+//
+//                m_redisService.LeftPushValue(Constants.REDIS_KEY_WAIT, strProcUuid);
+//
+//                File fileDocSrc = new File(new File(Constants.PATH_RESULT).getAbsolutePath() + "/" + strProcUuid);
+//
+//                if (fileDocSrc.exists())
+//                    FileUtils.deleteDirectory(fileDocSrc);
+//
+//                strProcUuid = m_redisService.RightPopValue(Constants.REDIS_KEY_PROC, String.class);
+//            } catch (Exception e) {
+//                ParserRes structParserRes = new ParserRes();
+//
+//                structParserRes.status = "failure";
+//                structParserRes.id = "";
+//                structParserRes.message = "Initailization error.";
+//
+//                try {
+//                    log.info(objectMapper.writeValueAsString(structParserRes) );
+//                } catch (JsonProcessingException ex) {
+//                    log.error(ex.getMessage());
+//                    throw new RuntimeException(ex);
+//                }
+//                return;
+//            }
+//        }
 
         // Task(Thread) Controller 초기화
         if (m_taskCtrl == null) {
