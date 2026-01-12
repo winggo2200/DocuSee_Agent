@@ -1,5 +1,6 @@
 package com.docuseeagent.controller;
 
+import ch.qos.logback.core.util.FileUtil;
 import com.docuseeagent.config.Constants;
 import com.docuseeagent.dparser.DParser;
 import com.docuseeagent.docusee.DocuSee;
@@ -12,6 +13,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -24,9 +30,11 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -124,14 +132,13 @@ public class RestApiCtrl {
                 structParserRes.message = "The document is being processed.";
 
                 try {
-                    log.info(objectMapper.writeValueAsString(structParserRes) );
+                    log.info(objectMapper.writeValueAsString(structParserRes));
                     return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.OK);
                 } catch (JsonProcessingException e) {
                     log.error(e.getMessage());
                     throw new RuntimeException(e);
                 }
-            }
-            else if (m_redisService.HasValue(Constants.REDIS_KEY_COMPLETED, _strUuid)) {
+            } else if (m_redisService.HasValue(Constants.REDIS_KEY_COMPLETED, _strUuid)) {
                 structParserRes.status = "failure";
                 structParserRes.id = strUuid;
                 structParserRes.message = "The document parsing is completed.";
@@ -177,7 +184,15 @@ public class RestApiCtrl {
                 FileUtils.forceMkdir(fileGPU);
             }
 
-            List<String> lstFileList = new ArrayList<>();
+            File fileTemp = new File(strFilePath + "Temp");
+
+            if (!fileTemp.exists()) {
+                FileUtils.forceMkdir(fileTemp);
+            }
+
+            List<String> lstNoSupportFileList = new ArrayList<>();
+            //List<String> lstNoSupportExcelFileList = new ArrayList<>();
+            List<String> lstLimitCells = new ArrayList<>();
 
             for (MultipartFile file : _files) {
                 String strFileName = file.getOriginalFilename();
@@ -192,27 +207,77 @@ public class RestApiCtrl {
                     File fileDoc = new File(fileGPU.getAbsolutePath() + "/" + file.getOriginalFilename());
                     file.transferTo(fileDoc);
 
-                } else if ( strFileExt.equals("doc") || strFileExt.equals("docx")
-                        || strFileExt.equals("xls") || strFileExt.equals("xlsx") || strFileExt.equals("hwp") || strFileExt.equals("hwpx")
-                        || strFileExt.equals("csv")) {
+                } else if (strFileExt.equals("doc") || strFileExt.equals("docx")
+                        || strFileExt.equals("hwp") || strFileExt.equals("hwpx") || strFileExt.equals("csv")) {
                     File fileDoc = new File(fileCPU.getAbsolutePath() + "/" + file.getOriginalFilename());
                     file.transferTo(fileDoc);
-                }else{
-                    lstFileList.add(file.getOriginalFilename());
+                } else if (strFileExt.equals("xls") || strFileExt.equals("xlsx")) {
+                    File fileExcel = new File(fileTemp.getAbsoluteFile() + "/" + file.getOriginalFilename());
+                    file.transferTo(fileExcel);
+
+                    FileInputStream fileIS = new FileInputStream(fileExcel);
+
+                    Workbook workbook = null;
+
+                    if (file.getOriginalFilename().endsWith(".xls")) {
+                        workbook = new HSSFWorkbook(fileIS);
+                    } else if (file.getOriginalFilename().endsWith(".xlsx")) {
+                        workbook = new XSSFWorkbook(fileIS);
+                    }
+
+                    if (workbook != null) {
+                        Boolean bCellSize = CalCellSize(workbook);
+
+                        if (bCellSize) {
+                            File fileDoc = new File(fileCPU.getAbsolutePath() + "/" + file.getOriginalFilename());
+                            Files.copy(fileExcel.toPath(), fileDoc.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        } else {
+                            lstLimitCells.add(file.getOriginalFilename());
+                        }
+                    } else {
+                        lstNoSupportFileList.add(file.getOriginalFilename());
+                    }
+                } else {
+                    lstNoSupportFileList.add(file.getOriginalFilename());
                 }
             }
 
-            if(_files.length == lstFileList.size()){
+            StringBuilder sbMsg = new StringBuilder();
+
+            if (!lstNoSupportFileList.isEmpty()) {
+                sbMsg.append("Not supported files: " + String.join(", ", lstNoSupportFileList));
+            }
+
+            if (!lstLimitCells.isEmpty()) {
+                if (!sbMsg.isEmpty()) sbMsg.append("\n");
+
+                sbMsg.append("Over maximum cells(Excel) : " + String.join(", ", lstLimitCells));
+            }
+
+            if (fileTemp.exists()) {
+                FileUtils.forceDelete(fileTemp);
+            }
+
+            if (_files.length == lstNoSupportFileList.size() + lstLimitCells.size() ) {
                 structParserRes.status = "failure";
                 structParserRes.id = strUuid;
-                structParserRes.message = "No supported files.";
+                structParserRes.message = sbMsg.toString();
 
                 m_redisService.RemoveListValue(Constants.REDIS_KEY_UPLOAD, strUuid);
 
-                log.warn(objectMapper.writeValueAsString(structParserRes) );
+                log.error(objectMapper.writeValueAsString(structParserRes));
 
-                return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.OK);
+                return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
             }
+
+
+            structParserRes.status = "success";
+            structParserRes.id = strUuid;
+            structParserRes.message = "Upload completed.";
+
+            if(!sbMsg.isEmpty()) structParserRes.message += ("\n" + sbMsg.toString());
+
+            log.info(objectMapper.writeValueAsString(structParserRes));
 
             RedisDataInfo redisDataInfo = new RedisDataInfo();
             redisDataInfo.status = Constants.REDIS_STATUS_UPLOAD;
@@ -227,26 +292,16 @@ public class RestApiCtrl {
             //if (m_redisService.HasValue(Constants.REDIS_KEY_UPLOAD, strUuid) != null)
             m_redisService.RightPushValue(Constants.REDIS_KEY_UPLOAD, strUuid);
 
-            structParserRes.status = "success";
-            structParserRes.id = strUuid;
-            structParserRes.message = "Upload completed.";
-
-            if (!lstFileList.isEmpty()) {
-                structParserRes.message += " Not supported files: " + String.join(", ", lstFileList);
-            }
-
-            log.info(objectMapper.writeValueAsString(structParserRes) );
-
             return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.OK);
         } catch (IOException e) {
             m_redisService.RemoveListValue(Constants.REDIS_KEY_UPLOAD, strUuid);
             //log.error(e.getMessage());
-            structParserRes.status = "success";
+            structParserRes.status = "failure";
             structParserRes.id = strUuid;
             structParserRes.message = "Fail to upload file.";
 
-            try{
-                return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.OK);
+            try {
+                return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
             } catch (JsonProcessingException ex) {
                 log.error(ex.getMessage());
                 throw new RuntimeException(ex);
@@ -267,7 +322,6 @@ public class RestApiCtrl {
         if (strData != null) {
             if (!strData.isEmpty()) {
                 try {
-
                     ObjectMapper mapper = new ObjectMapper();
                     RedisDataInfo dataInfo = mapper.readValue(strData, RedisDataInfo.class);
 
@@ -289,9 +343,9 @@ public class RestApiCtrl {
 
                             structParserRes.status = "failure";
                             structParserRes.message = "Fail to add waiting queue.";
-                            log.warn(objectMapper.writeValueAsString(structParserRes) );
+                            log.warn(objectMapper.writeValueAsString(structParserRes));
 
-                            return new ResponseEntity(objectMapper.writeValueAsString(structParserRes) , HttpStatus.OK);
+                            return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.OK);
                         }
                     } else { // upload 이외의 상태
                         structParserRes.status = "failure";
@@ -361,6 +415,12 @@ public class RestApiCtrl {
                 FileUtils.forceMkdir(fileGPU);
             }
 
+            File fileTemp = new File(strFilePath + "Temp");
+
+            if (!fileTemp.exists()) {
+                FileUtils.forceMkdir(fileTemp);
+            }
+
             String strFileName = _file.getOriginalFilename();
 
             String strFileExt = strFileName.substring(strFileName.lastIndexOf(".") + 1);
@@ -385,13 +445,69 @@ public class RestApiCtrl {
                     return new ResponseEntity(objectMapper.writeValueAsString(structDocuseeRes), HttpStatus.OK);
                 }
 
-            } else if ( strFileExt.equals("doc") || strFileExt.equals("docx")
+            } else if (strFileExt.equals("doc") || strFileExt.equals("docx")
                     || strFileExt.equals("xls") || strFileExt.equals("xlsx") || strFileExt.equals("hwp") || strFileExt.equals("hwpx")
                     || strFileExt.equals("csv")) {
-                File fileDoc = new File(fileCPU.getAbsolutePath() + "/" + _file.getOriginalFilename());
-                _file.transferTo(fileDoc);
 
-                DParser.Upload(strUuid);
+                if (strFileExt.equals("xls") || strFileExt.equals("xlsx")) {
+                    File fileExcel = new File(fileTemp.getAbsoluteFile() + "/" + _file.getOriginalFilename());
+                    _file.transferTo(fileExcel);
+
+                    FileInputStream fileIS = new FileInputStream(fileExcel);
+
+                    Workbook workbook = null;
+
+                    if (_file.getOriginalFilename().endsWith(".xls")) {
+                        workbook = new HSSFWorkbook(fileIS);
+                    } else if (_file.getOriginalFilename().endsWith(".xlsx")) {
+                        workbook = new XSSFWorkbook(fileIS);
+                    }
+
+                    ParserRes structParserRes = new ParserRes();
+
+                    if (workbook != null) {
+                        Boolean bCellSize = CalCellSize(workbook);
+                        if (bCellSize) {
+                            File fileDoc = new File(fileCPU.getAbsolutePath() + "/" + _file.getOriginalFilename());
+                            Files.copy(fileExcel.toPath(), fileDoc.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+                            if (fileTemp.exists()) {
+                                FileUtils.forceDelete(fileTemp);
+                            }
+                        }
+                        else {
+                            if (fileTemp.exists()) {
+                                FileUtils.forceDelete(fileTemp);
+                            }
+
+                            structParserRes.status = "failure";
+                            structParserRes.id = strUuid;
+                            structParserRes.message = "Over maximum cells(Excel). - " + _file.getOriginalFilename();
+
+                            m_redisService.RemoveListValue(Constants.REDIS_KEY_UPLOAD, strUuid);
+
+                            log.error(objectMapper.writeValueAsString(structParserRes));
+
+                            return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
+                        }
+                    }else{
+                        if (fileTemp.exists()) {
+                            FileUtils.forceDelete(fileTemp);
+                        }
+
+                        structParserRes.status = "failure";
+                        structParserRes.id = strUuid;
+                        structParserRes.message = "No supported file. - " + _file.getOriginalFilename();
+
+                        log.error(objectMapper.writeValueAsString(structParserRes));
+
+                        return new ResponseEntity(objectMapper.writeValueAsString(structParserRes), HttpStatus.BAD_REQUEST);
+                    }
+                }else {
+                    File fileDoc = new File(fileCPU.getAbsolutePath() + "/" + _file.getOriginalFilename());
+                    _file.transferTo(fileDoc);
+                }
+                //DParser.Upload(strUuid);
                 ParserRes structDparserRes = DParser.Upload(strUuid);
 
                 if (!structDparserRes.status.equals("success")) {
@@ -420,7 +536,7 @@ public class RestApiCtrl {
                     structDparserRes = DParser.GetData(strUuid);
 
                     if (!structDparserRes.message.equals("Waiting state") && !structDparserRes.message.equals("Processing state") && !structDparserRes.message.equals("Uploading state")) {
-                        if(structDparserRes.status.equals("failure")){
+                        if (structDparserRes.status.equals("failure")) {
                             return new ResponseEntity(objectMapper.writeValueAsString(structDparserRes), HttpStatus.OK);
                         }
                         break;
@@ -653,6 +769,26 @@ public class RestApiCtrl {
 
         log.info("Load file completed. - " + _strSrcFile);
         return new ResponseEntity<Resource>(resourceFile, header, HttpStatus.OK);
+    }
+
+    private Boolean CalCellSize(Workbook _workbook) {
+        for (int i = 0; i < _workbook.getNumberOfSheets(); ++i) {
+            Sheet sheet = _workbook.getSheetAt(i);
+
+            long nCells = 0;
+
+            for (int nRowIdx = 0; nRowIdx < sheet.getLastRowNum(); ++nRowIdx) {
+                Row row = sheet.getRow(nRowIdx);
+
+                if (row != null) {
+                    nCells += row.getLastCellNum() - row.getFirstCellNum();
+                }
+            }
+
+            if (nCells > Constants.LIMIT_CELLS) return false;
+        }
+
+        return true;
     }
 
 

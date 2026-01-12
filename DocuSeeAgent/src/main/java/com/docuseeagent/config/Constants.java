@@ -22,6 +22,9 @@ public class Constants {
     // 파일 보관 제한 시간
     public static final int TIMEOUT_HOUR_DOC = 3;
 
+    // 엑셀의 셀 수 제한
+    public static final long LIMIT_CELLS = 80000;
+
     public static String SERVER_ADDR_GPU = "";
     public static String SERVER_MAIN_HOST = "";
     public static String SERVER_ADDR_CPU = ""; // Default value for local testing
