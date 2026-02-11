@@ -1,6 +1,8 @@
 package com.docuseeagent.config;
 
 public class Constants {
+    public static final int MAX_CONCURRENT_JOBS = 5;
+
     // 지난 시간 삭제 처리를 위함
     public static final String REDIS_KEY_UPLOAD = "uploaded";
     // 대기중인 항목을 위함 - 갑자기 중단되었을 경우 복구용

@@ -25,30 +25,6 @@ public class RedisConfig {
     @Value("${spring.data.redis.password}")
     private String password;
 
-//    @Bean
-//    public ReactiveRedisConnectionFactory redisConnectionFactory() {
-//        return new LettuceConnectionFactory(host, port);
-//    }
-//
-//    @Bean
-//    public ReactiveRedisOperations<String, Object> redisTemplate() {
-//        ReactiveRedisConnectionFactory rrcf = redisConnectionFactory();
-//
-//        /*
-//        JSON 형식의 데이터를 Redis에 저장하기 위한 직렬화 및 역직렬화를 담당하는 Jackson2JsonRedisSerializer를 생성
-//        이 때, Object.class를 전달하여 어떠한 객체 타입이라도 처리할 수 있도록 설정
-//        * */
-//        Jackson2JsonRedisSerializer<Object> serializer = new Jackson2JsonRedisSerializer<>(Object.class);
-//
-//        RedisSerializationContext.RedisSerializationContextBuilder<String, Object> builder = RedisSerializationContext
-//                .newSerializationContext(new StringRedisSerializer());
-//
-//        RedisSerializationContext<String, Object> context = builder.value(serializer).hashValue(serializer)
-//                .hashKey(serializer).build();
-//
-//        return new ReactiveRedisTemplate<>(rrcf, context);
-//    }
-
     @Bean
     public RedisConnectionFactory redisConnectionFactory() {
         // Redis 연결을 설정

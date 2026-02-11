@@ -1,12 +1,13 @@
-package com.docuseeagent.jobtask;
-
+package com.docuseeagent.service;
 
 import com.docuseeagent.config.Constants;
 import com.docuseeagent.model.redis.RedisDataInfo;
-import com.docuseeagent.service.RedisService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
@@ -21,14 +22,13 @@ import java.util.Date;
 import java.util.List;
 
 @Slf4j
-public class FileCtrlTask implements Runnable {
-    private RedisService m_redisService;
+@Service
+@RequiredArgsConstructor
+public class FileCtrlService {
+    private final RedisService m_redisService;
 
-    public FileCtrlTask(RedisService _redisService) {
-        m_redisService = _redisService;
-    }
-
-    public void run() {
+    @Async("filectrlExecutor")
+    public void FileCtrl(){
         String strFilePath = new File(Constants.PATH_DOC).getAbsolutePath() + "/";
         DeleteDirectory(strFilePath, Constants.REDIS_KEY_UPLOAD);
         DeleteDirectory(strFilePath);
