@@ -25,7 +25,7 @@ public class Constants {
     public static final int TIMEOUT_HOUR_DOC = 3;
 
     // 엑셀의 셀 수 제한
-    public static final long LIMIT_CELLS = 80000;
+    public static long LIMIT_CELLS = 80000;
 
     public static String SERVER_ADDR_GPU = "";
     public static String SERVER_MAIN_HOST = "";
@@ -41,15 +41,25 @@ public class Constants {
         SERVER_ADDR_CPU = System.getenv("SERVER_ADDR_CPU");
         SERVER_ADDR_GPU = System.getenv("SERVER_ADDR_GPU");
         SERVER_ADDR_IMG = System.getenv("SERVER_ADDR_IMG");
+        //LIMIT_CELLS = Integer.parseInt(System.getenv("EXCEL_LIMIT_CELLS"));
 
-        // Default
-        if(SERVER_MAIN_HOST == null) SERVER_MAIN_HOST = "http://localhost:8080";
+        try {
+            if (System.getenv("EXCEL_LIMIT_CELLS") != null)
+                LIMIT_CELLS =  Integer.parseInt(System.getenv("EXCEL_LIMIT_CELLS"));
+        }catch(Exception e){
+            LIMIT_CELLS = 80000;
+        }finally {
+            // Default
+            if (SERVER_MAIN_HOST == null) SERVER_MAIN_HOST = "http://localhost:8080";
 
-        if(SERVER_ADDR_CPU == null) SERVER_ADDR_CPU = "http://localhost:8081/api/v2/dparser";
-        else SERVER_ADDR_CPU += "/api/v2/dparser";
+            if (SERVER_ADDR_CPU == null) SERVER_ADDR_CPU = "http://localhost:8081/api/v2/dparser";
+            else SERVER_ADDR_CPU += "/api/v2/dparser";
 
-        if(SERVER_ADDR_GPU == null) SERVER_ADDR_GPU = "http://localhost:33002";
+            if (SERVER_ADDR_GPU == null) SERVER_ADDR_GPU = "http://localhost:33002";
 
-        if(SERVER_ADDR_IMG == null) SERVER_ADDR_IMG = "http://localhost:9000";
+            if (SERVER_ADDR_IMG == null) SERVER_ADDR_IMG = "http://localhost:9000";
+
+            //System.out.println("Limit cells count : " + LIMIT_CELLS);
+        }
     }
 }
